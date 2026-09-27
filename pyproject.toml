@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "entropack"
+version = "0.1.0"
+description = "EntroPack: general-purpose tensor compression for PyTorch with lossless and rate-controlled lossy schemes and GPU encoding and decoding."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "DiffSynth-Studio" }]
+# Runtime deps. The CUDA lane additionally needs cupy for the running CUDA major version:
+# `pip install entropack[cuda13]` (CUDA 13) or `[cuda12]` (CUDA 12). Without cupy
+# the package degrades to the pure-torch eager lane instead of failing.
+dependencies = [
+    "torch>=2.10",
+    "numpy>=1.23",
+    "dahuffman>=0.4",
+]
+
+[project.optional-dependencies]
+cuda13 = ["cupy-cuda13x>=14"]
+cuda12 = ["cupy-cuda12x>=14"]
+
+[tool.setuptools.packages.find]
+include = ["entropack*"]
+
+[tool.setuptools.package-data]
+"entropack.schemes.dfloat11" = ["*.cu"]
+"entropack.schemes.tile_ans" = ["*.cu", "*.cuh"]
+"entropack.schemes.lattice_rans" = ["*.cu"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
