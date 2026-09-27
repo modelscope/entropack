@@ -561,7 +561,7 @@ class _DecodePlan:
 
 def _decode_plan(layout, stream_meta, freq_tables, info, caps, threads: int) -> _DecodePlan:
     device = freq_tables.device
-    fingerprint = (stream_meta.data_ptr(), stream_meta._version, freq_tables.data_ptr(), freq_tables._version, device, threads)
+    fingerprint = (stream_meta.data_ptr(), freq_tables.data_ptr(), device, threads)
     cached = getattr(layout, "_lattice_rans_decode_plan", None)
     if cached is not None and cached[0] == fingerprint:
         return cached[1]

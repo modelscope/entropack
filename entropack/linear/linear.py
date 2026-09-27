@@ -1,7 +1,6 @@
-import copy
 import dataclasses
 from numbers import Real
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import torch
 from torch.nn import functional as F
@@ -18,9 +17,9 @@ _BACKEND = "cuda"
 class CompressedLinear(torch.nn.Linear):
     """A linear layer with compressed weights, reconstructed during each forward call.
 
-    The layer registers compressed buffers for ``state_dict``, device transfers, and
-    ``deepcopy``. Its dense ``weight`` parameter is ``None``. Each forward reconstructs a
-    temporary weight, casts it to the activation dtype, and applies ``F.linear``.
+    The frozen ``weight`` is a ``CompressedTensor`` parameter. Each forward
+    reconstructs the stored weight, casts it to the activation dtype, and applies
+    ``F.linear``. Checkpoints retain the original packed representation.
     CUDA and CuPy are required.
 
     Args:
@@ -29,11 +28,11 @@ class CompressedLinear(torch.nn.Linear):
         bias: whether to keep a bias. The bias is not compressed.
         config: compression configuration. ``None`` selects a lossless scheme by dtype.
         device: device for the bias. Compressed buffers retain the source weight's device.
-        dtype: container dtype, which must be supported by the selected scheme."""
+        dtype: container dtype, which must be supported by the selected scheme.
+    """
 
     state_buffer_names: ClassVar[tuple[str, ...]] = ()
-    state_prefix: ClassVar[str] = "_entropack."
-    accepts_raw_container: ClassVar[bool] = False
+    state_prefix: ClassVar[str] = "weight._entropack."
 
     def __init__(
         self, in_features: int, out_features: int, bias: bool = True, *, config=None,
@@ -45,21 +44,13 @@ class CompressedLinear(torch.nn.Linear):
         if bias:
             self.bias = torch.nn.Parameter(torch.zeros(out_features, dtype=dtype, device=device), requires_grad=False)
         self.config = config
-        self._container_dtype = require_dtype(dtype)
+        self._init_dtype = require_dtype(dtype)
         if config is not None:
             scheme = get_scheme(name_for_config(config))
             if not scheme.supports(self.container_dtype):
                 raise ValueError(f"'{scheme.name}' does not support format {self.container_dtype}")
-        self._compressed = None
         for name in self.state_buffer_names:
             self.register_buffer(name, None, persistent=False)
-
-    @property
-    def scheme_name(self) -> str:
-        """The scheme the stored container uses, else the one the config names, else ``"auto"``."""
-        if self._compressed is not None:
-            return self._compressed.compress_method
-        return "auto" if self.config is None else name_for_config(self.config)
 
     @property
     def _encode_config(self):
@@ -70,39 +61,26 @@ class CompressedLinear(torch.nn.Linear):
     @property
     def _decode_config(self):
         if self.config is None:
-            return self._compressed.scheme.make_config({"execution_backend": _BACKEND})
+            return self.weight.scheme.make_config({"execution_backend": _BACKEND})
         return dataclasses.replace(self.config, execution_backend=_BACKEND)
 
     @property
     def container_dtype(self) -> torch.dtype:
-        """The format the weight is stored in, which the scheme has to serve."""
-        return self._container_dtype
-
-    @property
-    def buffer_names(self) -> tuple[str, ...]:
-        """The stored container's buffer names; empty while the layer holds no weight."""
-        return () if self._compressed is None else tuple(self._compressed.scheme.buffer_names)
+        """The configured compression dtype, unchanged by layer dtype casts."""
+        return self._init_dtype
 
     @property
     def qweight(self) -> torch.Tensor:
-        """One tensor standing in for the weight, for a caller that must move or measure it."""
-        for name in self.buffer_names:
-            buffer = self._buffers.get(name)
-            if buffer is not None:
-                return buffer
+        """A packed weight buffer exposed for quantization-framework compatibility."""
+        if self.weight is not None:
+            for name in self.weight.scheme.buffer_names:
+                return self.weight.buffers[name]
         return self.bias
 
     @property
-    def compressed_weight(self) -> CompressedTensor:
-        """The stored container."""
-        if self._compressed is None:
-            raise RuntimeError(f"{type(self).__name__} has no compressed weight; load one or call compress_weight")
-        return self._compressed
-
-    @property
     def stored_nbytes(self) -> int:
-        """Bytes this layer's weight occupies: the container, its serialized header, and any W8A8 scale."""
-        total = self.compressed_weight.storage_nbytes()
+        """Stored weight bytes, including the serialized header and any W8A8 scales."""
+        total = self.weight.storage_nbytes()
         for name in self.state_buffer_names:
             buffer = self._buffers.get(name)
             if buffer is not None:
@@ -111,73 +89,28 @@ class CompressedLinear(torch.nn.Linear):
 
     @property
     def compressed_bits(self) -> float:
-        """Bits per element of the source weight's shape, which is what a network rate is built from."""
-        rows, cols = self.compressed_weight.shape
+        """Stored bits per weight element, including metadata."""
+        rows, cols = self.weight.shape
         return self.stored_nbytes * 8 / (rows * cols)
 
-    @property
-    def _held_buffers(self) -> tuple[str, ...]:
-        return self.buffer_names + self.state_buffer_names
-
-    def _holds(self, method: str) -> bool:
-        return self.config is None or method == self.scheme_name or (
-            self.accepts_raw_container and method == "raw"
-        )
-
     def compress_weight(self, weight: torch.Tensor) -> None:
-        """Compress ``weight`` and store it, replacing whatever the layer held."""
-        self._prepare(weight.detach())
+        """Initialize the layer with compressed ``weight``."""
+        self.weight = torch.nn.Parameter(self._compress_tensor(weight.detach()), requires_grad=False)
 
-    def _prepare(self, weight: torch.Tensor) -> None:
-        self.set_compressed(self._container_for(weight))
-
-    def _container_for(self, tensor: torch.Tensor) -> CompressedTensor:
+    def _compress_tensor(self, tensor: torch.Tensor) -> CompressedTensor:
         compressed = compress(tensor.to(self.container_dtype), self._encode_config)
-        if compressed.compress_method == "raw" and not self.accepts_raw_container:
+        if compressed.compress_method == "raw" and "reason" in compressed.header:
             raise RuntimeError(
-                f"{self.scheme_name} cannot store a {tuple(tensor.shape)} {self.container_dtype} weight for "
-                f"{type(self).__name__}: {compressed.header.get('reason', 'asked to store the weight verbatim')}"
+                f"{compressed.header['requested']} cannot store a {tuple(tensor.shape)} {self.container_dtype} weight for "
+                f"{type(self).__name__}: {compressed.header['reason']}"
             )
         return compressed
 
-    def set_compressed(self, compressed: CompressedTensor) -> None:
-        """Adopt a container built elsewhere, such as one read from a checkpoint.
-
-        It has to hold this layer's shape and container format and use the scheme this layer's config
-        names, so a container written for another layer cannot be loaded into this one by accident.
-        """
-        if not isinstance(compressed, CompressedTensor):
-            raise TypeError(f"expected an entropack CompressedTensor, got {type(compressed).__name__}")
-        expected = (self.out_features, self.in_features)
-        if compressed.shape != expected:
-            raise ValueError(f"compressed weight shape {compressed.shape} does not match this Linear's {expected}")
-        if not self._holds(compressed.compress_method):
-            raise ValueError(
-                f"compressed weight uses '{compressed.compress_method}', this Linear is '{self.scheme_name}'"
-            )
-        if compressed.dtype != self.container_dtype:
-            raise ValueError(
-                f"compressed weight holds {compressed.dtype}, this Linear is configured for {self.container_dtype}"
-            )
-        names = tuple(compressed.scheme.buffer_names)
-        self._compressed = CompressedTensor(
-            header=compressed.header, buffers={name: compressed.buffers[name] for name in names},
-            shape=compressed.shape, dtype=compressed.dtype,
-        )
-        for name in names:
-            self.register_buffer(name, self._compressed.buffers[name], persistent=False)
-
-    def _container_on(self, device: str | torch.device | None) -> CompressedTensor:
-        compressed = self.compressed_weight
-        if device is None or compressed.buffers[self.buffer_names[0]].device == torch.device(device):
-            return compressed
-        return compressed.to(device)
-
     def _reconstruct(self, device: str | torch.device | None = None) -> torch.Tensor:
-        return decompress(self._container_on(device), self._decode_config)
+        return decompress(self.weight.to(device=device), self._decode_config)
 
     def dequantize(self, device: str | torch.device | None = None) -> torch.Tensor:
-        """The dense weight, reconstructed on ``device``, or on the container's device by default."""
+        """Reconstruct the dense weight on ``device``, defaulting to the weight's device."""
         return self._reconstruct(device)
 
     @classmethod
@@ -197,9 +130,7 @@ class CompressedLinear(torch.nn.Linear):
         if weight is None or weight.device.type == "meta":
             raise ValueError("cannot compress a Linear whose weight is not materialized")
         kwargs.setdefault("dtype", weight.dtype)
-        out = cls(
-            linear.in_features, linear.out_features, bias=linear.bias is not None, device=weight.device, **kwargs,
-        )
+        out = cls(linear.in_features, linear.out_features, bias=linear.bias is not None, device=weight.device, **kwargs)
         out.compress_weight(weight.data)
         if linear.bias is not None:
             out.bias = torch.nn.Parameter(linear.bias.data.clone(), requires_grad=False)
@@ -207,12 +138,8 @@ class CompressedLinear(torch.nn.Linear):
 
     @property
     def device(self) -> torch.device:
-        """The device the layer's buffers are on, or ``meta`` while it holds none."""
-        for name in self._held_buffers:
-            buffer = self._buffers.get(name)
-            if buffer is not None:
-                return buffer.device
-        return self.bias.device if self.bias is not None else torch.device("meta")
+        """The weight device, or the bias device while the weight is not loaded."""
+        return self.weight.device if self.weight is not None else self.bias.device if self.bias is not None else torch.device("meta")
 
     def _bias_on(self, device: torch.device) -> torch.Tensor | None:
         return None if self.bias is None else self.bias.to(device)
@@ -222,19 +149,17 @@ class CompressedLinear(torch.nn.Linear):
         return F.linear(x, self.dequantize(x.device).to(x.dtype), self._bias_on(x.device))
 
     def extra_repr(self) -> str:
-        parts = [f"scheme={self.scheme_name}", f"container={str(self.container_dtype).removeprefix('torch.')}"]
-        if self._compressed is not None:
+        scheme = "auto" if self.config is None else name_for_config(self.config)
+        parts = [f"scheme={scheme}", f"container={str(self.container_dtype).removeprefix('torch.')}"]
+        if self.weight is not None:
             parts.append(f"bits={self.compressed_bits:.3f}")
         if self.config is not None:
             parts.append(f"config={type(self.config).__name__}")
         return ", ".join(parts)
 
-    def _sync_compressed(self) -> None:
-        if self._compressed is not None:
-            self._compressed.buffers = {name: self._buffers[name] for name in self.buffer_names}
-
     def _apply(self, fn, recurse=True):
-        held = {name: self._buffers.pop(name) for name in self._held_buffers if name in self._buffers}
+        # Preserve auxiliary scale dtypes when Module.to casts the layer.
+        held = {name: self._buffers.pop(name) for name in self.state_buffer_names if name in self._buffers}
         try:
             super()._apply(fn, recurse=recurse)
         finally:
@@ -244,23 +169,16 @@ class CompressedLinear(torch.nn.Linear):
                     continue
                 moved = fn(buffer)
                 self._buffers[name] = moved if moved.dtype == buffer.dtype else buffer.to(device=moved.device)
-        self._sync_compressed()
         return self
-
-    def __deepcopy__(self, memo: dict[int, Any]) -> "CompressedLinear":
-        clone = type(self).__new__(type(self))
-        memo[id(self)] = clone
-        for key, value in self.__dict__.items():
-            clone.__dict__[key] = copy.deepcopy(value, memo)
-        clone._sync_compressed()
-        return clone
 
     def _save_to_state_dict(self, destination: dict, prefix: str, keep_vars: bool) -> None:
         super()._save_to_state_dict(destination, prefix, keep_vars)
-        if self._compressed is None:
+        # Serialize the packed representation instead of the wrapper parameter.
+        destination.pop(prefix + "weight", None)
+        if self.weight is None:
             return
         container_prefix = prefix + self.state_prefix
-        written = self._compressed.state_dict(container_prefix)
+        written = self.weight.state_dict(container_prefix)
         for name in self.state_buffer_names:
             buffer = self._buffers[name]
             if buffer is not None:
@@ -268,28 +186,58 @@ class CompressedLinear(torch.nn.Linear):
         for key, value in written.items():
             destination[key] = value if keep_vars else value.detach()
 
-    def _load_from_state_dict(
-        self, state_dict: dict, prefix: str, local_metadata, strict, missing_keys, unexpected_keys, error_msgs,
-    ) -> None:
+    def _load_from_state_dict(self, state_dict: dict, prefix: str, local_metadata, strict, missing_keys, unexpected_keys, error_msgs) -> None:
         container_prefix = prefix + self.state_prefix
         header_key = container_prefix + "header"
         if header_key in state_dict:
+            consumed = [header_key]
             try:
-                self.set_compressed(CompressedTensor.from_state_dict(state_dict, prefix=container_prefix))
+                compressed = CompressedTensor.from_state_dict(state_dict, prefix=container_prefix)
+                consumed.extend(container_prefix + "buffers." + name for name in compressed.buffers)
+                assign = local_metadata.get("assign_to_params_buffers", False)
+
+                # Copy loading keeps the target device and existing Parameter; assign=True adopts the checkpoint tensors.
+                if self.weight is not None:
+                    device = self.weight.device
+                elif self.bias is not None and self.bias.device.type != "meta":
+                    device = self.bias.device
+                else:
+                    device = compressed.device
+                if not assign:
+                    compressed = compressed.to(device=device, copy=True)
+                loaded_weight = torch.nn.Parameter(compressed, requires_grad=False)
+                if not assign and self.weight is not None:
+                    torch.utils.swap_tensors(self.weight, loaded_weight)
+                else:
+                    self.weight = loaded_weight
+
+                # Apply the same copy/assign behavior to auxiliary state, such as FP8/INT8 weight scales.
                 for name in self.state_buffer_names:
                     key = container_prefix + name
                     if key not in state_dict:
                         raise ValueError(f"compressed state is missing '{key}'")
-                    self._buffers[name] = state_dict[key]
+                    value = state_dict[key]
+                    if not assign:
+                        if self._buffers[name] is None:
+                            value = value.to(device=device, copy=True)
+                        else:
+                            self._buffers[name].copy_(value)
+                            value = self._buffers[name]
+                    self._buffers[name] = value
+                    consumed.append(key)
             except (TypeError, ValueError) as error:
                 error_msgs.append(f"{prefix[:-1]}: {error}")
-            for key in [key for key in state_dict if key.startswith(container_prefix)]:
+
+            # Leave unrecognized keys for the parent's strict checks.
+            for key in consumed:
                 state_dict.pop(key)
         elif strict:
             missing_keys.append(header_key)
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs,
-        )
+
+        # Let the parent load bias without expecting a dense weight entry.
+        weight = self._parameters.pop("weight")
+        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+        self._parameters["weight"] = weight
 
 
 class _W8A8LinearFunction(torch.autograd.Function):
@@ -317,7 +265,6 @@ class QuantizedLinear(CompressedLinear):
     min_tokens: ClassVar[int]
     min_capability: ClassVar[tuple[int, int]]
     state_buffer_names = ("weight_scale",)
-    accepts_raw_container = True
 
     def __init__(
         self, in_features: int, out_features: int, bias: bool = True, *, config=None,
@@ -356,19 +303,20 @@ class QuantizedLinear(CompressedLinear):
             scaled = scaled.round()
         return scaled.clamp(-self.code_max, self.code_max).to(self.code_dtype), scale
 
-    def _prepare(self, weight: torch.Tensor) -> None:
-        codes, scale = self._quantize_rows(weight)
-        self.set_compressed(self._container_for(codes))
+    def compress_weight(self, weight: torch.Tensor) -> None:
+        """Quantize the source weight, compress its codes, and store the row scales."""
+        codes, scale = self._quantize_rows(weight.detach())
+        self.weight = torch.nn.Parameter(self._compress_tensor(codes), requires_grad=False)
         self.weight_scale = scale
 
     def codes(self, device: str | torch.device | None = None) -> torch.Tensor:
-        """The stored codes as a dense tensor. The weight is these times their per-row scale."""
-        return self._reconstruct(device)
+        """Decode the weight codes in ``code_dtype`` for low-precision matrix multiplication."""
+        return decompress(self.weight.to(device=device, dtype=self.code_dtype), self._decode_config)
 
     def dequantize(self, device: str | torch.device | None = None) -> torch.Tensor:
-        """The dense weight: :meth:`codes` times the per-row scale the quantization fitted."""
+        """Reconstruct dense weights in the dtype used to initialize the layer."""
         codes = self.codes(device)
-        return codes.float() * self.weight_scale.to(codes.device).unsqueeze(1)
+        return (codes.float() * self.weight_scale.to(codes.device).unsqueeze(1)).to(self._init_dtype)
 
     def _require_8bit_gemm(self, device: torch.device) -> None:
         if device.type != "cuda":
@@ -391,15 +339,15 @@ class QuantizedLinear(CompressedLinear):
         return kernels.quantize_rows(flat, self.code_dtype, self.code_max, self.rounds_to_integer)
 
     def _gemm_shapes(self, tokens: int) -> tuple[int, int, int]:
-        return (max(tokens, self.min_tokens), round_up(self.out_features, self.code_alignment),
-                round_up(self.in_features, self.code_alignment))
+        return (max(tokens, self.min_tokens), round_up(self.out_features, self.code_alignment), round_up(self.in_features, self.code_alignment))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply the low-precision linear operation.
 
         The layer recovers its FP8 or INT8 codes, quantizes activations per row, and runs the
         corresponding matrix multiplication. Input gradients use the reconstructed numerical
-        weight. The compressed base weights remain frozen."""
+        weight. The compressed base weights remain frozen.
+        """
         self._require_8bit_gemm(x.device)
         if x.requires_grad:
             return _W8A8LinearFunction.apply(x, self)
@@ -414,18 +362,14 @@ class QuantizedLinear(CompressedLinear):
         rows, outs, cols = self._gemm_shapes(tokens)
         padded_activation = pad(pad(activation, 0, rows), 1, cols)
         padded_codes = pad(pad(codes, 0, outs), 1, cols)
-        out = self._gemm(padded_activation, padded_codes, pad(scale, 0, rows),
-                         pad(weight_scale, 0, outs), x.dtype)
+        out = self._gemm(padded_activation, padded_codes, pad(scale, 0, rows), pad(weight_scale, 0, outs), x.dtype)
         return out[:tokens, : self.out_features].reshape(*x.shape[:-1], self.out_features)
 
     def _bias_padded(self, device: torch.device, columns: int) -> torch.Tensor | None:
         bias = self._bias_on(device)
         return None if bias is None else pad(bias, 0, columns)
 
-    def _epilogue(
-        self, product: torch.Tensor, activation_scale: torch.Tensor, weight_scale: torch.Tensor,
-        out_dtype: torch.dtype,
-    ) -> torch.Tensor:
+    def _epilogue(self, product: torch.Tensor, activation_scale: torch.Tensor, weight_scale: torch.Tensor, out_dtype: torch.dtype) -> torch.Tensor:
         out = product.to(torch.float32)
         out.mul_(activation_scale.unsqueeze(1))
         bias = self._bias_padded(out.device, out.shape[1])
@@ -447,7 +391,8 @@ class CompressedFP8Linear(QuantizedLinear):
     With no compression configuration, quantized codes are stored directly.
     :class:`~entropack.LatticeRANSConfig` additionally compresses them at targets from 1 up
     to, but excluding, 8 bits per element. Inference decodes the FP8 codes before matrix
-    multiplication. Stored size also includes metadata and per-row weight scales."""
+    multiplication. Stored size also includes metadata and per-row weight scales.
+    """
 
     code_dtype = torch.float8_e4m3fn
     code_max = float(torch.finfo(torch.float8_e4m3fn).max)
@@ -473,7 +418,8 @@ class CompressedINT8Linear(QuantizedLinear):
     available and ``torch._int_mm`` otherwise. With no compression configuration,
     quantized codes are stored directly. :class:`~entropack.LatticeRANSConfig` additionally compresses
     them at targets from 1 up to, but excluding, 8 bits per element. Stored size also
-    includes metadata and per-row weight scales."""
+    includes metadata and per-row weight scales.
+    """
 
     code_dtype = torch.int8
     code_max = 127.0
@@ -494,6 +440,5 @@ class CompressedINT8Linear(QuantizedLinear):
             return kernels.int8_gemm(activation, codes, activation_scale, weight_scale, bias, out_dtype)
         return self._epilogue(torch._int_mm(activation, codes.t()), activation_scale, weight_scale, out_dtype)
 
-__all__ = [
-    "CompressedFP8Linear", "CompressedINT8Linear", "CompressedLinear", "QuantizedLinear",
-]
+
+__all__ = ["CompressedFP8Linear", "CompressedINT8Linear", "CompressedLinear", "QuantizedLinear"]

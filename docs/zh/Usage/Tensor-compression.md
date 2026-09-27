@@ -72,6 +72,7 @@ print(restored.device, restored.dtype)
 ```
 
 对 `compressed.to(device)` 返回的压缩张量解压，得到的张量也位于该设备上。
+`compressed.to(dtype=...)` 可改变解压输出类型，无需重新压缩。
 
 ## 保存与加载
 

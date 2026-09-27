@@ -73,6 +73,7 @@ print(restored.device, restored.dtype)
 ```
 
 Decompressing the object returned by `compressed.to(device)` restores the tensor on that device.
+`compressed.to(dtype=...)` changes the decompressed output dtype without recompression.
 
 ## Save and load
 

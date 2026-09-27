@@ -14,7 +14,7 @@ compress(tensor: torch.Tensor, config: CompressionConfig) -> CompressedTensor
 ```
 
 Compresses `tensor` using the scheme selected by `config`. Returns a `CompressedTensor`
-that decompresses to the same shape and dtype as the input.
+that decompresses to the same shape and dtype as the input by default.
 
 Input requirements depend on the scheme:
 DFloat11 accepts BF16 tensors, Tile-ANS supports multiple dtypes, and lattice quantization requires
@@ -35,9 +35,9 @@ failures raise errors.
 decompress(compressed: CompressedTensor, config: CompressionConfig) -> torch.Tensor
 ```
 
-Returns a tensor with the input's original shape and dtype. Lossless schemes restore its values
-bit for bit; lossy schemes return an approximate reconstruction. The result is on the original
-input device unless the container has been moved, for example with `compressed.to(device)`.
+Returns a tensor with `compressed.shape`, `compressed.dtype`, and `compressed.device`.
+Without an output dtype conversion, lossless schemes restore input values bit for bit;
+lossy schemes return an approximate reconstruction.
 
 | Parameter | Meaning |
 | --- | --- |
@@ -49,15 +49,17 @@ or requantize the tensor.
 
 ## CompressedTensor
 
-Holds the compressed representation of one tensor. Usually returned by `compress` or restored
-from a checkpoint with `from_state_dict`.
+A `torch.Tensor` subclass holding the compressed representation of one tensor. Usually returned
+by `compress` or restored from a checkpoint with `from_state_dict`. Use `decompress` before
+performing numerical operations.
 
 ### Common properties
 
 | Property | Type | Meaning |
 | --- | --- | --- |
-| `shape` | `tuple[int, ...]` | Original tensor shape |
+| `shape` | `torch.Size` | Original tensor shape |
 | `dtype` | `torch.dtype` | Reconstructed tensor dtype |
+| `encoded_dtype` | `torch.dtype` | Dtype used for encoding |
 | `compress_method` | `str` | Scheme actually used by the container |
 | `lossless` | `bool` | Whether the scheme is lossless |
 | `actual_bpp` | `float` | Stored bits per element, including metadata |
@@ -69,7 +71,7 @@ This measures the compressed representation, not checkpoint file size or runtime
 
 | Method | Returns | Meaning |
 | --- | --- | --- |
-| `to(device)` | `CompressedTensor` | Returns a new container on the specified device without changing its dtype or values; accepts only a device argument |
+| `to(...)` | `CompressedTensor` | Changes device or output dtype without recompression; `copy=True` copies storage |
 | `storage_nbytes(include_header=True)` | `int` | Total compressed size in bytes; `include_header=False` excludes the container header |
 | `state_dict(prefix="")` | `dict[str, torch.Tensor]` | Exports the compressed tensor for saving |
 | `CompressedTensor.from_state_dict(state, prefix="")` | `CompressedTensor` | Restores the container from that dictionary without recompression |
@@ -77,6 +79,7 @@ This measures the compressed representation, not checkpoint file size or runtime
 Use the same `prefix` when saving and restoring. The dictionary can be saved with `torch.save`
 and loaded with `torch.load(..., weights_only=True)`. Set `map_location` to choose the device
 on which it will be restored.
+Loading restores the encoded dtype. Call `.to(dtype=...)` afterwards if a different output dtype is needed.
 
 ## CompressedLinear
 
@@ -113,15 +116,15 @@ or load a checkpoint before running inference.
 
 | Interface | Returns | Meaning |
 | --- | --- | --- |
-| `compress_weight(weight)` | `None` | Compresses and replaces the weights; requires shape `(out_features, in_features)` |
-| `dequantize(device=None)` | `torch.Tensor` | Returns dense weights with `container_dtype`, on the layer's device unless `device` is specified |
+| `compress_weight(weight)` | `None` | Initializes compressed weights with shape `(out_features, in_features)` |
+| `dequantize(device=None)` | `torch.Tensor` | Returns dense weights with `weight.dtype`, on the layer's device unless `device` is specified |
 | `forward(x)` | `torch.Tensor` | Applies the layer to `x` of shape `(..., in_features)` and returns shape `(..., out_features)` |
-| `compressed_weight` | `CompressedTensor` | Compressed weight container held by the layer |
+| `weight` | `CompressedTensor` | Frozen compressed weight parameter held by the layer |
 | `container_dtype` | `torch.dtype` | Dtype of the weights or quantized codes in the compressed container |
 | `stored_nbytes` | `int` | Weight storage bytes, including metadata and low-precision quantization scales, excluding bias |
 | `compressed_bits` | `float` | `8 * stored_nbytes / (in_features * out_features)` |
 
-Invoke the forward operation as `layer(x)`. The dense `.weight` is `None`; use `dequantize()`
+Invoke the forward operation as `layer(x)`. `.weight` is a compressed tensor; use `dequantize()`
 when numerical weights are needed.
 
 Use standard `state_dict()` / `load_state_dict()` calls to save and restore layer state.
@@ -151,7 +154,7 @@ per-row quantization scales needed to reconstruct weights.
 | Method | Returns | Meaning |
 | --- | --- | --- |
 | `codes(device=None)` | FP8 or INT8 tensor | Restores quantized codes without applying row scales |
-| `dequantize(device=None)` | FP32 tensor | Multiplies restored codes by their row scales to obtain numerical weights |
+| `dequantize(device=None)` | `torch.Tensor` | Returns the layer's initialization dtype, which `from_linear` defaults to the source weight dtype |
 
 Both methods return tensors on the layer's device unless `device` is specified.
 Lossy compression may change the codes from their initial quantized values.

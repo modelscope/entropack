@@ -19,10 +19,7 @@ def buffers_fingerprint(buffers: dict, shape, dtype) -> Any:
         tuple(shape) if shape is not None else None,
         dtype,
         tuple(
-            (
-                name, tensor.data_ptr(), tensor._version, tuple(tensor.shape), tuple(tensor.stride()), tensor.dtype,
-                tensor.device,
-            )
+            (name, tensor.data_ptr(), tuple(tensor.shape), tuple(tensor.stride()), tensor.dtype, tensor.device)
             for name, tensor in sorted(buffers.items())
         ),
     )
@@ -34,10 +31,10 @@ def packed_buffers(packed: dict, kind: type) -> Any:
 
 def cached_parse(layout: torch.Tensor, parse, attribute: str):
     cached = getattr(layout, attribute, None)
-    if cached is None or cached[0] != layout._version:
-        cached = (layout._version, parse(layout))
+    if cached is None:
+        cached = parse(layout)
         setattr(layout, attribute, cached)
-    return cached[1]
+    return cached
 
 
 class Scheme(ABC):

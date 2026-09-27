@@ -12,7 +12,7 @@ logger = logging.getLogger("entropack")
 
 
 class CompressionFallbackWarning(RuntimeWarning):
-    """The category :func:`compress` warns under when it stored a tensor uncompressed."""
+    """Warning emitted when compression falls back to storing the tensor uncompressed."""
 
 
 def compress(tensor: torch.Tensor, config: CompressionConfig) -> CompressedTensor:
@@ -27,7 +27,10 @@ def compress(tensor: torch.Tensor, config: CompressionConfig) -> CompressedTenso
 
     Encoding failures can return an uncompressed ``raw`` container with a
     :class:`CompressionFallbackWarning`. Its header records the requested scheme and
-    failure reason. Invalid configurations and backend dispatch failures raise errors."""
+    failure reason. Invalid configurations and backend dispatch failures raise errors.
+    """
+    if isinstance(tensor, CompressedTensor):
+        raise TypeError("compress expects an uncompressed tensor; decompress the container before recompressing")
     scheme = get_scheme(name_for_config(config))
     validate_config(config)
     try:
@@ -40,9 +43,7 @@ def compress(tensor: torch.Tensor, config: CompressionConfig) -> CompressedTenso
             scheme.name, tuple(tensor.shape), tensor.dtype, error,
         )
         return _compress_raw(tensor, scheme.name, error)
-    return CompressedTensor(
-        header={"compress_method": scheme.name}, buffers=packed, shape=tuple(tensor.shape), dtype=tensor.dtype,
-    )
+    return CompressedTensor(header={"compress_method": scheme.name}, buffers=packed, shape=tuple(tensor.shape), dtype=tensor.dtype)
 
 
 def _compress_raw(tensor: torch.Tensor, requested: str, error: Exception) -> CompressedTensor:
@@ -68,6 +69,8 @@ def decompress(compressed: CompressedTensor, config: CompressionConfig) -> torch
             the stored data.
 
     Returns:
-        A tensor with the container's shape and dtype, on the device holding its buffers."""
+        A tensor with the container's shape and dtype, on the device holding its buffers.
+    """
     validate_config(config)
-    return compressed.scheme.decode(compressed.buffers, shape=compressed.shape, dtype=compressed.dtype, config=config)
+    restored = compressed.scheme.decode(compressed.buffers, shape=compressed.shape, dtype=compressed.encoded_dtype, config=config)
+    return restored.to(compressed.dtype)
