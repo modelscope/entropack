@@ -21,10 +21,29 @@ def _parse_dtype(name: str) -> torch.dtype:
 
 
 class CompressedTensor(torch.Tensor):
-    """Frozen compressed tensor with a logical output dtype.
+    """Packed tensor storage exposed through a frozen PyTorch Tensor interface.
 
-    ``encoded_dtype`` records the codec's input type. ``to(dtype=...)`` changes
-    the output dtype without casting packed buffers or re-encoding values.
+    Create containers with :func:`entropack.compress` or :meth:`from_state_dict`.
+    The wrapper exposes the uncompressed shape, while ``buffers`` hold the stored
+    data and codec metadata. Use :func:`entropack.decompress` to obtain a dense
+    tensor before numerical operations.
+
+    ``dtype`` selects the output type of ``decompress``; ``encoded_dtype`` records
+    the codec's input type. With the default ``copy=False``, ``to(dtype=...)``
+    changes only the output type and shares packed storage. Device transfers move
+    buffers without changing their dtypes. Use ``clone()`` or ``to(..., copy=True)``
+    for an independent storage copy.
+
+    :meth:`state_dict` exports a tensor-only representation. Loading restores the
+    encoded dtype; temporary output-dtype changes are not saved. The wrapper
+    cannot require gradients. Treat packed buffers as read-only.
+
+    Args:
+        header: codec metadata containing the ``compress_method`` scheme name.
+        buffers: named tensors holding stored data and codec metadata on one device.
+        shape: shape of the uncompressed tensor.
+        dtype: logical dtype returned by ``decompress``.
+        encoded_dtype: dtype expected by the codec. Defaults to ``dtype``.
     """
 
     header: dict[str, Any]
