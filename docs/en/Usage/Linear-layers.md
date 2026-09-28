@@ -1,15 +1,15 @@
 # Compressed Linear usage
 
-Compressed Linear replaces a PyTorch linear layer with one that uses compressed weights.
+`CompressedLinear` replaces a PyTorch linear layer with one that uses compressed weights.
 Call `layer(x)` as usual: the input's last dimension changes from `in_features` to
-`out_features`, and the other dimensions stay the same. A [Config](Configuration.md)
-selects the compression scheme and its parameters.
+`out_features`, and the other dimensions stay the same.
 
-Compressed Linear requires a CUDA GPU and the matching CuPy package. See
+Use a [Config](Configuration.md) to select the compression scheme and its parameters:
+`DFloat11Config`, `TileANSConfig`, or `LatticeRANSConfig`. The selected scheme must
+support the weight dtype.
+
+A CUDA GPU and the matching CuPy package are required. See
 [Quick start](Quick-start.md) for installation.
-
-`CompressedLinear` accepts `DFloat11Config`, `TileANSConfig`, or `LatticeRANSConfig`.
-The selected scheme must support the weight dtype.
 
 ## Replace an existing layer
 
