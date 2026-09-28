@@ -389,7 +389,7 @@ class CompressedFP8Linear(QuantizedLinear):
 
     Requires CUDA compute capability 8.9 or later and uses ``torch._scaled_mm``.
     With no compression configuration, quantized codes are stored directly.
-    :class:`~entropack.LatticeRANSConfig` additionally compresses them at targets from 1 up
+    :class:`~entropack.LatticeRANSConfig` additionally compresses them at targets from 0.001 up
     to, but excluding, 8 bits per element. Inference decodes the FP8 codes before matrix
     multiplication. Stored size also includes metadata and per-row weight scales.
     """
@@ -417,7 +417,7 @@ class CompressedINT8Linear(QuantizedLinear):
     Requires CUDA compute capability 8.0 or later. Matrix multiplication uses Triton when
     available and ``torch._int_mm`` otherwise. With no compression configuration,
     quantized codes are stored directly. :class:`~entropack.LatticeRANSConfig` additionally compresses
-    them at targets from 1 up to, but excluding, 8 bits per element. Stored size also
+    them at targets from 0.001 up to, but excluding, 8 bits per element. Stored size also
     includes metadata and per-row weight scales.
     """
 

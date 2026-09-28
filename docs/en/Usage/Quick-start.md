@@ -52,8 +52,9 @@ print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
 print(restored.shape, restored.dtype)
 ```
 
-`target_bpp` is measured in bits per element (bpp) and accepts integer or non-integer
-values from 1 to 11. `actual_bpp` includes metadata and can differ from the target,
+`target_bpp` is measured in bits per element (bpp) and accepts finite integer or non-integer
+values with `0.001 <= target_bpp <= 11`. Encoding caps the target by dtype as described in
+[Compression configuration](Configuration.md). `actual_bpp` includes metadata and can differ from the target,
 especially for small tensors. This scheme requires a nonempty 2D input without NaN or infinite values.
 
 See [Tensor compression](Tensor-compression.md) for reconstruction error,

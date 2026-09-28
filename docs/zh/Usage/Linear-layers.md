@@ -1,13 +1,13 @@
 # Compressed Linear 使用指南
 
-Compressed Linear 将 PyTorch 线性层替换为使用压缩权重的层。
+`CompressedLinear` 将 PyTorch 线性层替换为使用压缩权重的层。
 仍通过 `layer(x)` 调用：输入的最后一维从 `in_features` 变为 `out_features`，
-其余维度不变。[Config](Configuration.md) 指定压缩方案和参数。
+其余维度不变。
 
-Compressed Linear 需要 CUDA GPU 和对应版本的 CuPy，安装方式见[快速上手](Quick-start.md)。
+通过 [Config](Configuration.md) 指定压缩方案和参数，可选 `DFloat11Config`、
+`TileANSConfig` 或 `LatticeRANSConfig`，所选方案需支持权重的数据类型。
 
-`CompressedLinear` 可使用 `DFloat11Config`、`TileANSConfig` 或 `LatticeRANSConfig`，
-所选方案需支持权重的数据类型。
+运行需要 CUDA GPU 和对应版本的 CuPy，安装方式见[快速上手](Quick-start.md)。
 
 ## 替换一个已有层
 
@@ -80,7 +80,7 @@ print(output.shape, type(model[0]).__name__, type(model[2]).__name__)
 
 对于 `CompressedFP8Linear` 和 `CompressedINT8Linear`，`config=None` 仅做 FP8 或 INT8 量化，
 传入 `LatticeRANSConfig(target_bpp=...)` 则会对量化后的权重进一步进行有损压缩。
-目标码率需大于等于 1 bpp 且低于 8 bpp。
+目标码率需大于等于 0.001 bpp 且低于 8 bpp。
 
 ```python
 import torch

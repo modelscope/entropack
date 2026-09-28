@@ -64,7 +64,8 @@ print(restored.shape, restored.dtype)
 ```
 
 `target_bpp` 表示期望的每元素比特数（bpp），`actual_bpp` 返回包含元数据的实际存储码率。
-目标范围为 1–11，支持非整数值。
+支持满足 `0.001 <= target_bpp <= 11` 的有限目标值，包括非整数值。
+按数据类型限制的目标上限见[压缩配置](docs/zh/Usage/Configuration.md)。
 
 ### 使用 Compressed Linear
 
@@ -95,7 +96,7 @@ Config 定义压缩方案及其参数，在调用张量编解码函数或构造 
 | --- | --- |
 | `DFloat11Config()` | 专用于 BF16 张量的无损压缩，解压后逐位恢复输入，适合要求精确恢复的场景。 |
 | `TileANSConfig()` | 支持 BF16、FP16、FP32、FP8、INT8 等多种数据类型的无损压缩。压缩比取决于输入的数据分布。 |
-| `LatticeRANSConfig(target_bpp=...)` | 支持浮点和整数二维张量的有损压缩。`target_bpp` 指定每元素的目标比特数，范围为 1–11，支持非整数值，用于调整存储大小与重建精度之间的取舍。 |
+| `LatticeRANSConfig(target_bpp=...)` | 支持浮点和整数二维张量的有损压缩。`target_bpp` 指定每元素的目标比特数，范围为 [0.001, 11]，支持非整数值，用于调整存储大小与重建精度之间的取舍。 |
 
 方案选择和完整参数见[压缩配置](docs/zh/Usage/Configuration.md)。
 

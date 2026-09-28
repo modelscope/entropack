@@ -31,8 +31,8 @@ class LatticeRANSConfig(CompressionConfig):
     Decoding restores the input shape and dtype. Tile size and probability precision are
     stored with the compressed representation."""
 
-    #: Requested bits per input element, from 1 to 11 including non-integer values. Read actual_bpp for the stored rate.
-    target_bpp: Annotated[float, Range(1.0, 11.0)] = 4.0
+    #: Requested bits per input element in [0.001, 11], capped at 1 for BOOL and 8 for eight-bit dtypes. Read actual_bpp for the stored rate.
+    target_bpp: Annotated[float, Range(0.001, 11.0)] = 4.0
     #: Probability-table precision. None or zero selects automatically.
     prob_bits: Annotated[int | None, OneOf(SUPPORTED_PROB_BITS, silent=(0,))] = None
     #: Elements per tile. Larger tiles reduce per-tile metadata and the number of independent decode tasks. None selects by target rate.

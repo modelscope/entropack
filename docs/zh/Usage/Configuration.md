@@ -11,8 +11,8 @@ Config 选择压缩方案并设置编解码参数。`execution_backend` 默认�
 | `LatticeRANSConfig(target_bpp=...)` | 按目标码率进行有损压缩 | 非空、有限值组成的二维张量 |
 
 两个无损方案均逐位恢复输入，压缩后的大小取决于张量的数据分布。`TileANSConfig` 也支持 BF16，
-因此 BF16 张量可以选择其中任一无损方案。`LatticeRANSConfig` 接受每元素 1–11 bit 的目标码率，
-支持非整数值，实际存储码率可通过 `CompressedTensor.actual_bpp` 查看。
+因此 BF16 张量可以选择其中任一无损方案。`LatticeRANSConfig` 接受满足 `0.001 <= target_bpp <= 11`
+的有限目标码率，单位为每元素比特数，支持非整数值。实际存储码率可通过 `CompressedTensor.actual_bpp` 查看。
 
 ## 支持的张量数据类型
 
@@ -42,7 +42,7 @@ PyTorch 数据类型。打包的四比特格式、FP64 和复数类型不在支�
 
 修改编码参数只影响后续压缩，不会改变已有压缩结果。解码参数在恢复张量时生效。
 多数设置可保留默认值。
-有损压缩的存储码率由 `target_bpp` 控制，`row_rdo_iterations` 设为正数时启用逐行率失真优化（RDO）。
+有损压缩的目标码率由 `target_bpp` 设置，`row_rdo_iterations` 设为正数时启用逐行率失真优化（RDO）。
 
 ## CompressionConfig
 
@@ -78,10 +78,15 @@ PyTorch 数据类型。打包的四比特格式、FP64 和复数类型不在支�
 
 用于有限值组成的二维张量的有损压缩。
 
+编码时使用的有效目标为 `target_bpp` 与数据类型上限中的较小值：`bool` 为 1 bpp，
+`int8`、`uint8` 和所有支持的 FP8 类型为 8 bpp，其他支持的类型为 11 bpp。
+Config 保留用户设置的值。这些上限仅作用于编码目标；`actual_bpp` 包含元数据，可能超过这些上限。
+张量分布和元数据开销可能使较低的目标码率无法达到。`bool` 压缩仍为有损压缩。
+
 | 字段 | 类型 | 默认值 | 阶段 | 含义 |
 | --- | --- | --- | --- | --- |
 | `execution_backend` | `str` 或 `None` | `"auto"` | 编解码 | 后端选择，含义同上 |
-| `target_bpp` | [1, 11] 内浮点数 | `4.0` | 编码 | 每个输入元素的目标比特数，支持非整数。实际码率通过 `actual_bpp` 查看。 |
+| `target_bpp` | [0.001, 11] 内有限浮点数 | `4.0` | 编码 | 每个输入元素的目标比特数，编码时按数据类型限制上限，支持非整数。实际码率通过 `actual_bpp` 查看。 |
 | `prob_bits` | [9, 15] 内整数、`0` 或 `None` | `None` | 编码 | 概率表精度，`None` 或 `0` 自动选择 |
 | `tile_elements` | 正整数或 `None` | `None` | 编码 | 每个压缩块的元素数，影响压缩率和解码并行度。`None` 自动选择。 |
 | `row_rdo_iterations` | [0, 8] 内整数 | `0` | 编码 | 逐行率失真优化的轮数，`0` 关闭。更多轮次会增加压缩耗时。 |
