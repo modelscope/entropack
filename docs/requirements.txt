@@ -1,0 +1,7 @@
+docutils>=0.16.0
+myst_parser
+sphinx>=5.3.0
+sphinx-copybutton
+sphinx-rtd-theme
+sphinx_markdown_tables
+pymdown-extensions

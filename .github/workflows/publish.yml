@@ -1,0 +1,112 @@
+name: Build and publish distributions
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build wheel and source distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Check release version
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          config = tomllib.loads(Path("pyproject.toml").read_text())
+          expected = "v" + config["project"]["version"]
+          actual = os.environ["GITHUB_REF_NAME"]
+          if actual != expected:
+              raise SystemExit(f"Tag {actual} does not match package version {expected}")
+          PY
+
+      - name: Install build tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Check package metadata
+        run: python -m twine check --strict dist/*
+
+      - name: Check packaged CUDA sources
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          required = {
+              path.as_posix()
+              for path in Path("entropack").rglob("*")
+              if path.suffix in {".cu", ".cuh"}
+          }
+          if not required:
+              raise SystemExit("No CUDA sources found in the checkout")
+          wheels = list(Path("dist").glob("*.whl"))
+          sources = list(Path("dist").glob("*.tar.gz"))
+          if len(wheels) != 1 or len(sources) != 1:
+              raise SystemExit("Expected one wheel and one source distribution")
+          with zipfile.ZipFile(wheels[0]) as archive:
+              wheel_files = set(archive.namelist())
+          with tarfile.open(sources[0]) as archive:
+              source_files = {name.partition("/")[2] for name in archive.getnames()}
+          for name, files in (("wheel", wheel_files), ("source distribution", source_files)):
+              missing = required - files
+              if missing:
+                  raise SystemExit(f"Missing CUDA sources in {name}: {sorted(missing)}")
+          print(f"Verified {len(required)} CUDA source files in both distributions")
+          PY
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/entropack/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: python-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
