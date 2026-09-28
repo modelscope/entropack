@@ -12,8 +12,8 @@ EntroPack 是一个面向 PyTorch 的通用张量压缩库，支持完整保留�
 [文档](docs/zh/index.rst) · [English](README.md)
 
 - **灵活设置码率。** 支持每个权重矩阵以任意非整数目标码率压缩，也可以选择逐位保留输入的无损方案。
-- **保留数据类型。** 解压后保留输入的数据类型，包括 BF16、FP16、FP8、INT8 等。
-- **接入 PyTorch。** 通过统一接口压缩和恢复张量，使用 `state_dict` 保存；模型权重还可以通过 Compressed Linear 接入。
+- **多种数据类型。** 支持 16 种浮点、整数和布尔类型，例如 FP32、BF16、FP16、FP8、INT8 等。
+- **简单易用。** 通过统一接口压缩和恢复张量，使用 `state_dict` 保存；模型权重还可以通过 Compressed Linear 接入。
 
 ## 安装
 

@@ -14,9 +14,9 @@ in their original shape and dtype.
 
 - **Flexible bitrates.** Compress each weight matrix at any non-integer target bitrate,
   or preserve every input bit with a lossless scheme.
-- **Dtype preservation.** Restore tensors in their input dtype, including BF16, FP16, FP8,
-  and INT8.
-- **PyTorch integration.** Compress and restore tensors through a common API, and save
+- **Multiple dtypes.** Compress tensors in 16 floating-point, integer, and Boolean dtypes,
+  such as FP32, BF16, FP16, FP8, and INT8.
+- **Easy to use.** Compress and restore tensors through a common API, and save
   them with `state_dict`. Compressed linear layers provide an integration for model weights.
 
 ## Installation
