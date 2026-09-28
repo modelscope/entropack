@@ -11,9 +11,7 @@ requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "DiffSynth-Studio" }]
-# Runtime deps. The CUDA lane additionally needs cupy for the running CUDA major version:
-# `pip install entropack[cuda13]` (CUDA 13) or `[cuda12]` (CUDA 12). Without cupy
-# the package degrades to the pure-torch eager lane instead of failing.
+
 dependencies = [
     "torch>=2.10",
     "numpy>=1.23",

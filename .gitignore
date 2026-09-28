@@ -25,3 +25,6 @@ docs/*/_build/
 
 # Local tests
 /tests/
+
+# Local source-distribution rules
+/MANIFEST.in
