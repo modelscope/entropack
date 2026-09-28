@@ -132,7 +132,7 @@ CompressedLinear.from_linear(linear, **kwargs) -> CompressedLinear
 量化码格式由层类决定，构造参数 `dtype` 不改变 FP8 或 INT8 格式。
 
 `config=None` 时直接保存量化码。指定 `LatticeRANSConfig` 时进一步进行有损压缩，
-目标码率须满足 `1 <= target_bpp < 8`。`stored_nbytes` 包含重建权重所需的逐行量化尺度。
+目标码率须满足 `0.001 <= target_bpp < 8`。`stored_nbytes` 包含重建权重所需的逐行量化尺度。
 
 | 方法 | 返回值 | 含义 |
 | --- | --- | --- |

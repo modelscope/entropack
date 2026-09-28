@@ -83,7 +83,7 @@ error; use `skip` to keep that layer in its original form.
 
 For `CompressedFP8Linear` and `CompressedINT8Linear`, use `config=None` for FP8 or INT8
 quantization alone, or pass `LatticeRANSConfig(target_bpp=...)` to apply further lossy
-compression to the quantized weights. The target must be at least 1 bpp and less than 8 bpp.
+compression to the quantized weights. The target must be at least 0.001 bpp and less than 8 bpp.
 
 ```python
 import torch

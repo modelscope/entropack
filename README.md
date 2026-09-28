@@ -69,7 +69,8 @@ print(restored.shape, restored.dtype)
 ```
 
 `target_bpp` is the requested number of bits per element (bpp). `actual_bpp` reports the stored
-rate, including metadata. Targets from 1 to 11 are supported, including non-integer values.
+rate, including metadata. Finite targets with `0.001 <= target_bpp <= 11` are supported, including
+non-integer values. See [Compression configuration](docs/en/Usage/Configuration.md) for target limits by dtype.
 
 ### Compressed Linear
 
@@ -102,7 +103,7 @@ and decompression functions or to a compressed Linear layer's constructor.
 | --- | --- |
 | `DFloat11Config()` | Specialized lossless compression for BF16 tensors. Decompression restores every input bit, for applications requiring exact recovery. |
 | `TileANSConfig()` | Lossless compression for BF16, FP16, FP32, FP8, INT8, and other supported dtypes. The compression ratio depends on the input data distribution. |
-| `LatticeRANSConfig(target_bpp=...)` | Lossy compression of 2D floating-point and integer tensors. `target_bpp` specifies the target bits per element, from 1 to 11 including non-integer values, to balance storage size and reconstruction accuracy. |
+| `LatticeRANSConfig(target_bpp=...)` | Lossy compression of 2D floating-point and integer tensors. `target_bpp` specifies the target bits per element in [0.001, 11], including non-integer values, to balance storage size and reconstruction accuracy. |
 
 See [Compression configuration](docs/en/Usage/Configuration.md) for scheme selection
 and the complete parameter reference.

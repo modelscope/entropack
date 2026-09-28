@@ -148,7 +148,7 @@ The layer class determines the code format. The constructor's `dtype` argument d
 the FP8 or INT8 format.
 
 With `config=None`, quantized codes are stored directly. Passing `LatticeRANSConfig` applies
-additional lossy compression with `1 <= target_bpp < 8`. `stored_nbytes` includes the
+additional lossy compression with `0.001 <= target_bpp < 8`. `stored_nbytes` includes the
 per-row quantization scales needed to reconstruct weights.
 
 | Method | Returns | Meaning |

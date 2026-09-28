@@ -1,8 +1,8 @@
 # EntroPack lattice compression
 
 EntroPack's lattice scheme combines lossy vector quantization with lossless entropy coding
-to compress two-dimensional tensors. `LatticeRANSConfig` accepts target bitrates from 1 to
-11 bits per element, including non-integer values. Decompression retains the input dtype,
+to compress two-dimensional tensors. `LatticeRANSConfig` accepts finite target bitrates in
+[0.001, 11] bits per element, including non-integer values. Decompression retains the input dtype,
 while the target parameter controls storage rate.
 
 ![EntroPack encoding and decoding pipeline](../../assets/entropack-pipeline.png)

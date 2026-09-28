@@ -1,7 +1,7 @@
 # EntroPack 格量化压缩
 
 EntroPack 的格量化方案结合有损向量量化与无损熵编码，压缩二维张量。
-`LatticeRANSConfig` 支持每元素 1 至 11 bit 的目标，包括非整数码率。
+`LatticeRANSConfig` 支持 [0.001, 11] 范围内的有限目标码率，单位为每元素比特数，包括非整数值。
 解压后仍保留输入的数据类型，存储码率则通过目标参数调节。
 
 ![EntroPack 编码与解码流程](../../assets/entropack-pipeline.png)

@@ -80,7 +80,7 @@ print(output.shape, type(model[0]).__name__, type(model[2]).__name__)
 
 对于 `CompressedFP8Linear` 和 `CompressedINT8Linear`，`config=None` 仅做 FP8 或 INT8 量化，
 传入 `LatticeRANSConfig(target_bpp=...)` 则会对量化后的权重进一步进行有损压缩。
-目标码率需大于等于 1 bpp 且低于 8 bpp。
+目标码率需大于等于 0.001 bpp 且低于 8 bpp。
 
 ```python
 import torch

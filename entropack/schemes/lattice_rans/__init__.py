@@ -20,6 +20,7 @@ class LatticeRANSScheme(Scheme):
 
     def encode(self, weight: torch.Tensor, config: LatticeRANSConfig) -> dict:
         weight = prepare_weight(weight, scheme=self.name, ndim=2, dtypes=SUPPORTED_DTYPES, require_finite=True)
+        target_bpp = min(float(config.target_bpp), 1.0 if weight.dtype == torch.bool else weight.element_size() * 8.0)
         shape, device = tuple(weight.shape), weight.device
         pad = -shape[1] % LATTICE_DIM
         if pad:
@@ -28,11 +29,11 @@ class LatticeRANSScheme(Scheme):
         if run_on is not None and device != run_on:
             weight = weight.to(run_on)
         tile_elements = (
-            recommended_tile_elements(float(config.target_bpp)) if config.tile_elements is None
+            recommended_tile_elements(target_bpp) if config.tile_elements is None
             else int(config.tile_elements)
         )
         packed = lane.encode(
-            weight=weight, target_bpp=float(config.target_bpp),
+            weight=weight, target_bpp=target_bpp,
             prob_bits=None if config.prob_bits in (None, 0) else int(config.prob_bits),
             tile_elements=tile_elements, row_rdo_iterations=config.row_rdo_iterations,
             row_rdo_candidates=config.row_rdo_candidates, scale_search_iterations=config.scale_search_iterations,

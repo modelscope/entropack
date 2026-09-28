@@ -51,7 +51,8 @@ print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
 print(restored.shape, restored.dtype)
 ```
 
-`target_bpp` 的单位为每元素比特数（bpp），可设为 1–11 范围内的整数或非整数值。
+`target_bpp` 的单位为每元素比特数（bpp），可设为满足 `0.001 <= target_bpp <= 11` 的有限整数或非整数值。
+编码时按数据类型限制目标上限，详见[压缩配置](Configuration.md)。
 `actual_bpp` 返回包含元数据的实际存储码率，可能与目标不同，尤其在张量较小时。
 该方案要求输入为非空的二维张量，且不含 NaN 或无穷值。
 
