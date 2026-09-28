@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "entropack"
-version = "0.1.0"
+version = "0.1.1"
 description = "EntroPack: general-purpose tensor compression for PyTorch with lossless and rate-controlled lossy schemes and GPU encoding and decoding."
 readme = "README.md"
 requires-python = ">=3.10"
