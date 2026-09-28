@@ -9,7 +9,7 @@ EntroPack 是一个面向 PyTorch 的通用张量压缩库，支持完整保留�
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)
 
-[文档](docs/zh/index.rst) · [English](README.md)
+[文档](https://entropackdoc.readthedocs.io/zh-cn/latest/) · [English](README.md)
 
 - **灵活设置码率。** 支持每个权重矩阵以任意非整数目标码率压缩，也可以选择逐位保留输入的无损方案。
 - **多种数据类型。** 支持 16 种浮点、整数和布尔类型，例如 FP32、BF16、FP16、FP8、INT8 等。
@@ -39,7 +39,7 @@ pip install "entropack[cuda13]"
 将命令中的 `cuda13` 改为 `cuda12`。如果已安装匹配的 CuPy，源码安装和 PyPI 安装
 可分别使用 `pip install -e .` 和 `pip install entropack`。
 
-环境要求与使用示例见[快速上手](docs/zh/Usage/Quick-start.md)。
+环境要求与使用示例见[快速上手](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Quick-start.html)。
 
 ## 快速开始
 
@@ -65,7 +65,7 @@ print(restored.shape, restored.dtype)
 
 `target_bpp` 表示期望的每元素比特数（bpp），`actual_bpp` 返回包含元数据的实际存储码率。
 支持满足 `0.001 <= target_bpp <= 11` 的有限目标值，包括非整数值。
-按数据类型限制的目标上限见[压缩配置](docs/zh/Usage/Configuration.md)。
+按数据类型限制的目标上限见[压缩配置](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Configuration.html)。
 
 ### 使用 Compressed Linear
 
@@ -86,7 +86,7 @@ with torch.inference_mode():
 print(output.shape, f"{layer.compressed_bits:.2f} bits per weight")
 ```
 
-模型中的层替换和检查点操作见 [Compressed Linear 使用指南](docs/zh/Usage/Linear-layers.md)。
+模型中的层替换和检查点操作见 [Compressed Linear 使用指南](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Linear-layers.html)。
 
 ## Config：压缩配置
 
@@ -98,7 +98,7 @@ Config 定义压缩方案及其参数，在调用张量编解码函数或构造 
 | `TileANSConfig()` | 支持 BF16、FP16、FP32、FP8、INT8 等多种数据类型的无损压缩。压缩比取决于输入的数据分布。 |
 | `LatticeRANSConfig(target_bpp=...)` | 支持浮点和整数二维张量的有损压缩。`target_bpp` 指定每元素的目标比特数，范围为 [0.001, 11]，支持非整数值，用于调整存储大小与重建精度之间的取舍。 |
 
-方案选择和完整参数见[压缩配置](docs/zh/Usage/Configuration.md)。
+方案选择和完整参数见[压缩配置](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Configuration.html)。
 
 ## 性能
 
@@ -111,14 +111,14 @@ Config 定义压缩方案及其参数，在调用张量编解码函数或构造 
 
 | 指南 | 内容 |
 | --- | --- |
-| [快速上手](docs/zh/Usage/Quick-start.md) | 安装并运行张量压缩与 Compressed Linear 示例 |
-| [压缩配置](docs/zh/Usage/Configuration.md) | 选择方案、查看支持类型与完整参数 |
-| [通用张量压缩](docs/zh/Usage/Tensor-compression.md) | 编解码、存储统计、设备迁移和保存加载 |
-| [Compressed Linear 使用指南](docs/zh/Usage/Linear-layers.md) | 模型替换、低精度计算和检查点使用 |
-| [API 参考](docs/zh/API_Reference/index.md) | 查询函数、类与属性 |
+| [快速上手](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Quick-start.html) | 安装并运行张量压缩与 Compressed Linear 示例 |
+| [压缩配置](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Configuration.html) | 选择方案、查看支持类型与完整参数 |
+| [通用张量压缩](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Tensor-compression.html) | 编解码、存储统计、设备迁移和保存加载 |
+| [Compressed Linear 使用指南](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Linear-layers.html) | 模型替换、低精度计算和检查点使用 |
+| [API 参考](https://entropackdoc.readthedocs.io/zh-cn/latest/API_Reference/index.html) | 查询函数、类与属性 |
 
-压缩原理：[DFloat11](docs/zh/Principles/DFloat11.md)、[tile-ANS](docs/zh/Principles/Tile-ANS.md)、
-[EntroPack 格量化](docs/zh/Principles/Lattice-rANS.md)。
+压缩原理：[DFloat11](https://entropackdoc.readthedocs.io/zh-cn/latest/Principles/DFloat11.html)、[tile-ANS](https://entropackdoc.readthedocs.io/zh-cn/latest/Principles/Tile-ANS.html)、
+[EntroPack 格量化](https://entropackdoc.readthedocs.io/zh-cn/latest/Principles/Lattice-rANS.html)。
 
 ## 致谢
 
