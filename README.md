@@ -8,7 +8,7 @@ and reconstruction accuracy. GPU encoding and decoding compress tensors and rest
 in their original shape and dtype.
 
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)
+![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg) [![arXiv](https://img.shields.io/badge/arXiv-2609.34185-b31b1b.svg)](https://arxiv.org/abs/2609.34185)
 
 [Documentation](https://entropackdoc.readthedocs.io/en/latest/) · [中文](README_zh.md)
 
@@ -94,6 +94,21 @@ print(output.shape, f"{layer.compressed_bits:.2f} bits per weight")
 
 See [Compressed Linear usage](https://entropackdoc.readthedocs.io/en/latest/Usage/Linear-layers.html) for model replacement and checkpoint examples.
 
+### Pre-quantized models
+
+We provide pre-quantized weight packages produced by EntroPack for representative diffusion models on
+[ModelScope](https://www.modelscope.cn/models/DiffSynth-Studio/EntroPackPreQuants).
+These packages can be loaded using the quantization features of [DiffSynth-Studio](https://github.com/modelscope/DiffSynth-Studio):
+
+- **Z-Image-Turbo**: DiT and text encoder.
+- **Qwen-Image-2.1**: DiT and text encoder.
+- **MiniMax-H3**: two DiTs, FL2VA and Ref2VA, sharing the text encoder and video VAE.
+
+Each model provides DiT and text-encoder packages at **4/5/6/7/8 bpp**, plus:
+
+- **FP8@5** (`dit_fp8_5bpp`): FP8 W8A8 weight codes compressed to 5 bpp with EntroPack, using FP8 GEMM for inference.
+- **Extreme mixed-bit**: bitrate allocation based on layer sensitivity, reaching **2.3 bpp** for Z-Image-Turbo and **3.0 bpp** for Qwen-Image-2.1 and MiniMax-H3.
+
 ## Configuration
 
 Config defines the compression scheme and its settings. It is passed to tensor compression
@@ -139,3 +154,17 @@ EntroPack's design is inspired by [DFloat11](https://github.com/LeanModels/DFloa
 ## License
 
 [Apache License 2.0](LICENSE).
+
+## Citation
+
+```bibtex
+@misc{zhang2026entropackfastaccurateentropycoded,
+      title={EntroPack: Fast and Accurate Entropy-Coded Weight Compression at Arbitrary Bitrates},
+      author={Hong Zhang and Zhongjie Duan and Yingda Chen},
+      year={2026},
+      eprint={2609.34185},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2609.34185},
+}
+```

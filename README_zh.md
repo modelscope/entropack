@@ -7,7 +7,7 @@ EntroPack 是一个面向 PyTorch 的通用张量压缩库，支持完整保留�
 将压缩后的张量恢复为原来的形状和数据类型。
 
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)
+![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg) [![arXiv](https://img.shields.io/badge/arXiv-2609.34185-b31b1b.svg)](https://arxiv.org/abs/2609.34185)
 
 [文档](https://entropackdoc.readthedocs.io/zh-cn/latest/) · [English](README.md)
 
@@ -88,6 +88,20 @@ print(output.shape, f"{layer.compressed_bits:.2f} bits per weight")
 
 模型中的层替换和检查点操作见 [Compressed Linear 使用指南](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Linear-layers.html)。
 
+### 预量化模型
+
+我们在 [ModelScope](https://www.modelscope.cn/models/DiffSynth-Studio/EntroPackPreQuants) 提供由 EntroPack 生成的预量化权重包，
+覆盖以下代表性扩散模型，可通过 [DiffSynth-Studio](https://github.com/modelscope/DiffSynth-Studio) 的量化功能加载使用：
+
+- **Z-Image-Turbo**：DiT 与文本编码器。
+- **Qwen-Image-2.1**：DiT 与文本编码器。
+- **MiniMax-H3**：FL2VA 和 Ref2VA 两套 DiT，共享文本编码器与视频 VAE。
+
+各模型的 DiT 和文本编码器均提供 **4/5/6/7/8 bpp** 版本，另有两类特殊权重包：
+
+- **FP8@5**（`dit_fp8_5bpp`）：将 FP8 W8A8 量化后的权重码值经 EntroPack 压缩至 5 bpp，推理使用 FP8 GEMM。
+- **极限混合码率**：按层敏感度分配码率，Z-Image-Turbo 达到 **2.3 bpp**，Qwen-Image-2.1 和 MiniMax-H3 达到 **3.0 bpp**。
+
 ## Config：压缩配置
 
 Config 定义压缩方案及其参数，在调用张量编解码函数或构造 Compressed Linear 时传入。
@@ -130,3 +144,17 @@ EntroPack 的设计受到 [DFloat11](https://github.com/LeanModels/DFloat11)、
 ## 许可证
 
 [Apache License 2.0](LICENSE)。
+
+## 引用
+
+```bibtex
+@misc{zhang2026entropackfastaccurateentropycoded,
+      title={EntroPack: Fast and Accurate Entropy-Coded Weight Compression at Arbitrary Bitrates},
+      author={Hong Zhang and Zhongjie Duan and Yingda Chen},
+      year={2026},
+      eprint={2609.34185},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2609.34185},
+}
+```
