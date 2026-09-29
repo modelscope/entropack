@@ -144,7 +144,8 @@ def _max_stream_alpha(quantized) -> int:
     return alpha
 
 
-def _resolve_scale(x, X, rows, cols, target_bpp, prob_bits, tile_elements, iterations, max_vectors):
+def _resolve_scale(x, rms, X, rows, cols, target_bpp, prob_bits, tile_elements, iterations, max_vectors,
+                   row_rdo_iterations, row_rdo_candidates):
     """Auto prob_bits grows a bit at a time, only when the alphabet the chosen scale produces overflows the table, up to the
     ceiling; that growth is what lets the real rate track ``target_bpp`` at the high end. It never shrinks below its start:
     a coarser grid normalizes the distributions less exactly, so shrinking costs rate.
@@ -155,8 +156,9 @@ def _resolve_scale(x, X, rows, cols, target_bpp, prob_bits, tile_elements, itera
     """
     prob_bits, auto_prob_bits = resolve_prob_bits(prob_bits, target_bpp)
     if float(x.abs().amax().item()) == 0.0:
-        return 1.0, _quantize_at(X, 1.0), prob_bits, True
-
+        quantized = _quantize_at(X, 1.0)
+        scales, _ = _refit_row_scales(x, rms, quantized, 1.0, x.device)
+        return quantized, scales, prob_bits
     table_size = 1 << prob_bits
     clamped = False
     while True:
@@ -167,6 +169,16 @@ def _resolve_scale(x, X, rows, cols, target_bpp, prob_bits, tile_elements, itera
         while True:
             quantized = _quantize_at(X, scale)
             alpha = _max_stream_alpha(quantized)
+            if alpha <= table_size:
+                scales, row_sse = _refit_row_scales(x, rms, quantized, scale, x.device)
+                if row_rdo_iterations > 0:
+                    baseline = _candidate_of(quantized, scales, row_sse, x.device)
+                    c_np, z_np, m_np, scales = _optimize_rows(
+                        x, rms, X, baseline, scale, prob_bits, tile_elements, row_rdo_iterations, row_rdo_candidates,
+                    )
+                    quantized = c_np, z_np, m_np
+                    # RDO can widen the final alphabet beyond the baseline's capacity.
+                    alpha = _max_stream_alpha(quantized)
             if alpha <= table_size:
                 break
             if auto_prob_bits and prob_bits < 15:
@@ -179,7 +191,7 @@ def _resolve_scale(x, X, rows, cols, target_bpp, prob_bits, tile_elements, itera
         if not escalate:
             if clamped:
                 report_alphabet_clamp(scale, alpha, table_size)
-            return scale, quantized, prob_bits, False
+            return quantized, scales, prob_bits
 
 
 @dataclass(frozen=True)
@@ -310,17 +322,11 @@ def _encode_impl(
     rms, X = _rms_and_X(x)
     check_row_scales_finite(rms, weight.dtype)
 
-    s, quantized, prob_bits, all_zero = _resolve_scale(
-        x, X, rows, cols, target_bpp, prob_bits, tile_elements, scale_search_iterations, scale_search_max_vectors,
+    quantized, scales, prob_bits = _resolve_scale(
+        x, rms, X, rows, cols, target_bpp, prob_bits, tile_elements, scale_search_iterations, scale_search_max_vectors,
+        row_rdo_iterations, row_rdo_candidates,
     )
     c_np, z_np, m_np = quantized
-
-    scales, row_sse = _refit_row_scales(x, rms, quantized, s, device)
-    if row_rdo_iterations > 0 and not all_zero:
-        baseline = _candidate_of(quantized, scales, row_sse, device)
-        c_np, z_np, m_np, scales = _optimize_rows(
-            x, rms, X, baseline, s, prob_bits, tile_elements, row_rdo_iterations, row_rdo_candidates
-        )
 
     payload, states, offsets, meta, freq_tables = _encode_streams(c_np, z_np, m_np, prob_bits, tile_elements)
 

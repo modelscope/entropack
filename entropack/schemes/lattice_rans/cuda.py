@@ -310,7 +310,9 @@ def _resolve_scale(work, rms, options: _EncodeOptions):
     prob_bits = options.prob_bits
     if float(work.abs().amax().item()) == 0.0:
         request = _QuantizeRequest.of(work, rms, 1.0, prob_bits)
-        return options, request, _quantize_pass(request)
+        summary = _quantize_pass(request)
+        scales, row_sse = _refit_row_scales(request, summary)
+        return options, replace(summary, scales=scales, row_sse=row_sse)
     clamped = False
     while True:
         escalate = False
@@ -323,6 +325,14 @@ def _resolve_scale(work, rms, options: _EncodeOptions):
             summary = _quantize_pass(request)
             alpha = max(summary.alphabets) if summary.alphabets else 0
             if alpha <= options.table_size:
+                scales, row_sse = _refit_row_scales(request, summary)
+                summary = replace(summary, scales=scales, row_sse=row_sse)
+                if options.row_rdo_iterations > 0:
+                    summary = _optimize_rows(request, summary, options.row_rdo_iterations,
+                                             options.row_rdo_candidates, options.tile_elements)
+                    # RDO can widen the final alphabet beyond the baseline's capacity.
+                    alpha = max(summary.alphabets) if summary.alphabets else 0
+            if alpha <= options.table_size:
                 break
             if options.auto_prob_bits and prob_bits < 15:
                 prob_bits += 1
@@ -334,7 +344,7 @@ def _resolve_scale(work, rms, options: _EncodeOptions):
         if not escalate:
             if clamped:
                 report_alphabet_clamp(scale, alpha, options.table_size)
-            return options, request, summary
+            return options, summary
 
 
 def _build_codec_tables(summary: _QuantizeResult, options: _EncodeOptions, device):
@@ -442,13 +452,7 @@ def encode(
     # full-tensor copies from being alive at once.
     del xf
 
-    options, request, summary = _resolve_scale(work, rms, options)
-    scales, row_sse = _refit_row_scales(request, summary)
-    summary = replace(summary, scales=scales, row_sse=row_sse)
-    if options.row_rdo_iterations > 0 and float(work.abs().amax().item()) != 0.0:
-        summary = _optimize_rows(request, summary, options.row_rdo_iterations,
-                                 options.row_rdo_candidates, options.tile_elements)
-
+    options, summary = _resolve_scale(work, rms, options)
     freq_tables, cdfs_gpu, stream_meta = _build_codec_tables(summary, options, device)
     payload, offsets, states = _encode_streams(
         summary, freq_tables, cdfs_gpu, stream_meta, V, options, device, device_index)

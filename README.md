@@ -8,9 +8,9 @@ and reconstruction accuracy. GPU encoding and decoding compress tensors and rest
 in their original shape and dtype.
 
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)
+![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg) [![arXiv](https://img.shields.io/badge/arXiv-2609.34185-b31b1b.svg)](https://arxiv.org/abs/2609.34185)
 
-[Documentation](docs/en/index.rst) · [中文](README_zh.md)
+[Documentation](https://entropackdoc.readthedocs.io/en/latest/) · [中文](README_zh.md)
 
 - **Flexible bitrates.** Compress each weight matrix at any non-integer target bitrate,
   or preserve every input bit with a lossless scheme.
@@ -44,7 +44,7 @@ Both installation methods above use CUDA 13 and include the matching CuPy packag
 For CUDA 12, replace `cuda13` with `cuda12` in either command. If a compatible CuPy is
 already installed, use `pip install -e .` for source installation or `pip install entropack` for PyPI.
 
-See [Quick start](docs/en/Usage/Quick-start.md) for environment requirements and usage examples.
+See [Quick start](https://entropackdoc.readthedocs.io/en/latest/Usage/Quick-start.html) for environment requirements and usage examples.
 
 ## Get started
 
@@ -70,7 +70,7 @@ print(restored.shape, restored.dtype)
 
 `target_bpp` is the requested number of bits per element (bpp). `actual_bpp` reports the stored
 rate, including metadata. Finite targets with `0.001 <= target_bpp <= 11` are supported, including
-non-integer values. See [Compression configuration](docs/en/Usage/Configuration.md) for target limits by dtype.
+non-integer values. See [Compression configuration](https://entropackdoc.readthedocs.io/en/latest/Usage/Configuration.html) for target limits by dtype.
 
 ### Compressed Linear
 
@@ -92,7 +92,22 @@ with torch.inference_mode():
 print(output.shape, f"{layer.compressed_bits:.2f} bits per weight")
 ```
 
-See [Compressed Linear usage](docs/en/Usage/Linear-layers.md) for model replacement and checkpoint examples.
+See [Compressed Linear usage](https://entropackdoc.readthedocs.io/en/latest/Usage/Linear-layers.html) for model replacement and checkpoint examples.
+
+### Pre-quantized models
+
+We provide pre-quantized weight packages produced by EntroPack for representative diffusion models on
+[ModelScope](https://www.modelscope.cn/models/DiffSynth-Studio/EntroPackPreQuants).
+These packages can be loaded using the quantization features of [DiffSynth-Studio](https://github.com/modelscope/DiffSynth-Studio):
+
+- **Z-Image-Turbo**: DiT and text encoder.
+- **Qwen-Image-2.1**: DiT and text encoder.
+- **MiniMax-H3**: two DiTs, FL2VA and Ref2VA, sharing the text encoder and video VAE.
+
+Each model provides DiT and text-encoder packages at **4/5/6/7/8 bpp**, plus:
+
+- **FP8@5** (`dit_fp8_5bpp`): FP8 W8A8 weight codes compressed to 5 bpp with EntroPack, using FP8 GEMM for inference.
+- **Extreme mixed-bit**: bitrate allocation based on layer sensitivity, reaching **2.3 bpp** for Z-Image-Turbo and **3.0 bpp** for Qwen-Image-2.1 and MiniMax-H3.
 
 ## Configuration
 
@@ -105,7 +120,7 @@ and decompression functions or to a compressed Linear layer's constructor.
 | `TileANSConfig()` | Lossless compression for BF16, FP16, FP32, FP8, INT8, and other supported dtypes. The compression ratio depends on the input data distribution. |
 | `LatticeRANSConfig(target_bpp=...)` | Lossy compression of 2D floating-point and integer tensors. `target_bpp` specifies the target bits per element in [0.001, 11], including non-integer values, to balance storage size and reconstruction accuracy. |
 
-See [Compression configuration](docs/en/Usage/Configuration.md) for scheme selection
+See [Compression configuration](https://entropackdoc.readthedocs.io/en/latest/Usage/Configuration.html) for scheme selection
 and the complete parameter reference.
 
 ## Performance
@@ -120,14 +135,14 @@ model's 505.7 ms.
 
 | Guide | Contents |
 | --- | --- |
-| [Quick start](docs/en/Usage/Quick-start.md) | Install and run tensor compression and Compressed Linear examples |
-| [Compression configuration](docs/en/Usage/Configuration.md) | Choose a scheme and look up supported dtypes and parameters |
-| [Tensor compression](docs/en/Usage/Tensor-compression.md) | Encode, decode, inspect storage, move data, and save or load tensors |
-| [Compressed Linear usage](docs/en/Usage/Linear-layers.md) | Replace model layers, use low-precision computation, and manage checkpoints |
-| [API reference](docs/en/API_Reference/index.md) | Look up functions, classes, and properties |
+| [Quick start](https://entropackdoc.readthedocs.io/en/latest/Usage/Quick-start.html) | Install and run tensor compression and Compressed Linear examples |
+| [Compression configuration](https://entropackdoc.readthedocs.io/en/latest/Usage/Configuration.html) | Choose a scheme and look up supported dtypes and parameters |
+| [Tensor compression](https://entropackdoc.readthedocs.io/en/latest/Usage/Tensor-compression.html) | Encode, decode, inspect storage, move data, and save or load tensors |
+| [Compressed Linear usage](https://entropackdoc.readthedocs.io/en/latest/Usage/Linear-layers.html) | Replace model layers, use low-precision computation, and manage checkpoints |
+| [API reference](https://entropackdoc.readthedocs.io/en/latest/API_Reference/index.html) | Look up functions, classes, and properties |
 
-Compression principles: [DFloat11](docs/en/Principles/DFloat11.md), [tile-ANS](docs/en/Principles/Tile-ANS.md),
-and [EntroPack lattice quantization](docs/en/Principles/Lattice-rANS.md).
+Compression principles: [DFloat11](https://entropackdoc.readthedocs.io/en/latest/Principles/DFloat11.html), [tile-ANS](https://entropackdoc.readthedocs.io/en/latest/Principles/Tile-ANS.html),
+and [EntroPack lattice quantization](https://entropackdoc.readthedocs.io/en/latest/Principles/Lattice-rANS.html).
 
 ## Acknowledgements
 
@@ -139,3 +154,17 @@ EntroPack's design is inspired by [DFloat11](https://github.com/LeanModels/DFloa
 ## License
 
 [Apache License 2.0](LICENSE).
+
+## Citation
+
+```bibtex
+@misc{zhang2026entropackfastaccurateentropycoded,
+      title={EntroPack: Fast and Accurate Entropy-Coded Weight Compression at Arbitrary Bitrates},
+      author={Hong Zhang and Zhongjie Duan and Yingda Chen},
+      year={2026},
+      eprint={2609.34185},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2609.34185},
+}
+```
