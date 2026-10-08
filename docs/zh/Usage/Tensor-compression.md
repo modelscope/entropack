@@ -22,7 +22,7 @@ compressed = ep.compress(tensor, config)
 restored = ep.decompress(compressed, config)
 relative_error = (restored.float() - tensor.float()).norm() / tensor.float().norm()
 
-print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
+print(f"Stored: {compressed.actual_bpp:.2f} bits per parameter")
 print(f"Relative L2 error: {100 * relative_error:.2f}%")
 ```
 
@@ -40,7 +40,7 @@ compressed = ep.compress(tensor, config)
 
 print(compressed.shape, compressed.dtype, compressed.compress_method)
 print(f"Stored: {compressed.storage_nbytes()} bytes")
-print(f"Rate: {compressed.actual_bpp:.2f} bits per element")
+print(f"Rate: {compressed.actual_bpp:.2f} bits per parameter")
 ```
 
 `storage_nbytes()` 统计压缩结果的总字节数，包含恢复张量所需的元数据，

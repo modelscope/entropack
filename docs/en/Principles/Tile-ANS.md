@@ -53,5 +53,5 @@ restored = ep.decompress(compressed, config)
 assert restored.shape == tensor.shape
 assert restored.dtype == tensor.dtype
 assert torch.equal(restored.view(torch.uint8), tensor.view(torch.uint8))
-print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
+print(f"Stored: {compressed.actual_bpp:.2f} bits per parameter")
 ```

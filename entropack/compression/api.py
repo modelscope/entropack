@@ -50,7 +50,7 @@ def _compress_raw(tensor: torch.Tensor, requested: str, error: Exception) -> Com
     reason = f"{type(error).__name__}: {error}"
     warnings.warn(
         f"entropack stored a {tuple(tensor.shape)} {tensor.dtype} tensor uncompressed, at "
-        f"{tensor.element_size() * 8} bits per element: compress_method={requested!r} failed with {reason}",
+        f"{tensor.element_size() * 8} bits per parameter: compress_method={requested!r} failed with {reason}",
         CompressionFallbackWarning, stacklevel=3,
     )
     return CompressedTensor(

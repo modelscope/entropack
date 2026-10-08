@@ -153,7 +153,7 @@ class CompressedTensor(torch.Tensor):
 
     @property
     def actual_bpp(self) -> float:
-        """Bits per element of :attr:`shape`, serialized header included."""
+        """Bits per parameter of :attr:`shape`, serialized header included."""
         return self.storage_nbytes() * 8 / math.prod(self.shape)
 
     def validate(self) -> None:

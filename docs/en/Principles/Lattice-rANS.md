@@ -2,7 +2,7 @@
 
 EntroPack's lattice scheme combines lossy vector quantization with lossless entropy coding
 to compress two-dimensional tensors. `LatticeRANSConfig` accepts finite target bitrates in
-[0.001, 11] bits per element, including non-integer values. Decompression retains the input dtype,
+[0.001, 11] bits per parameter, including non-integer values. Decompression retains the input dtype,
 while the target parameter controls storage rate.
 
 ![EntroPack encoding and decoding pipeline](../../assets/entropack-pipeline.png)
@@ -53,7 +53,7 @@ element count and multiplied by eight.
 
 ## Usage
 
-The example targets 3.5 bits per element and measures relative L2 error against the input.
+The example targets 3.5 bits per parameter and measures relative L2 error against the input.
 Search and refinement settings are described in [Config](../Usage/Configuration.md).
 
 ```python
@@ -70,7 +70,7 @@ reference = tensor.float()
 relative_l2 = (restored.float() - reference).norm() / reference.norm()
 assert restored.shape == tensor.shape
 assert restored.dtype == tensor.dtype
-print(f"Target: {config.target_bpp:.2f} bits per element")
-print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
+print(f"Target: {config.target_bpp:.2f} bits per parameter")
+print(f"Stored: {compressed.actual_bpp:.2f} bits per parameter")
 print(f"Relative L2 error: {100 * relative_l2.item():.2f}%")
 ```

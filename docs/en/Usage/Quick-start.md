@@ -35,7 +35,7 @@ The first call may be slower while CUDA kernels compile. Measure performance aft
 ## Direct tensor compression
 
 This example selects lossy compression with `LatticeRANSConfig(target_bpp=3.5)`, compresses
-a 2D BF16 tensor at a target of 3.5 bits per element, and restores its original shape and dtype.
+a 2D BF16 tensor at a target of 3.5 bits per parameter, and restores its original shape and dtype.
 
 ```python
 import torch
@@ -47,12 +47,12 @@ config = ep.LatticeRANSConfig(target_bpp=3.5)
 compressed = ep.compress(tensor, config)
 restored = ep.decompress(compressed, config)
 
-print(f"Target: {config.target_bpp:.2f} bits per element")
-print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
+print(f"Target: {config.target_bpp:.2f} bits per parameter")
+print(f"Stored: {compressed.actual_bpp:.2f} bits per parameter")
 print(restored.shape, restored.dtype)
 ```
 
-`target_bpp` is measured in bits per element (bpp) and accepts finite integer or non-integer
+`target_bpp` is measured in bits per parameter (bpp) and accepts finite integer or non-integer
 values with `0.001 <= target_bpp <= 11`. Encoding caps the target by dtype as described in
 [Compression configuration](Configuration.md). `actual_bpp` includes metadata and can differ from the target,
 especially for small tensors. This scheme requires a nonempty 2D input without NaN or infinite values.

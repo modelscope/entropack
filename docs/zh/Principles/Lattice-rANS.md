@@ -1,7 +1,7 @@
 # EntroPack 格量化压缩
 
 EntroPack 的格量化方案结合有损向量量化与无损熵编码，压缩二维张量。
-`LatticeRANSConfig` 支持 [0.001, 11] 范围内的有限目标码率，单位为每元素比特数，包括非整数值。
+`LatticeRANSConfig` 支持 [0.001, 11] 范围内的有限目标码率，单位为每参数比特数，包括非整数值。
 解压后仍保留输入的数据类型，存储码率则通过目标参数调节。
 
 ![EntroPack 编码与解码流程](../../assets/entropack-pipeline.png)
@@ -41,7 +41,7 @@ EntroPack 用陪集标记和八个可逆整数字段表示格点，并利用奇�
 
 ## 使用示例
 
-以下示例以每元素 3.5 bit 为目标压缩张量，并以原始张量为参考计算相对 L2 误差。
+以下示例以每参数 3.5 bit 为目标压缩张量，并以原始张量为参考计算相对 L2 误差。
 搜索与精度优化参数见 [Config](../Usage/Configuration.md)。
 
 ```python
@@ -58,7 +58,7 @@ reference = tensor.float()
 relative_l2 = (restored.float() - reference).norm() / reference.norm()
 assert restored.shape == tensor.shape
 assert restored.dtype == tensor.dtype
-print(f"Target: {config.target_bpp:.2f} bits per element")
-print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
+print(f"Target: {config.target_bpp:.2f} bits per parameter")
+print(f"Stored: {compressed.actual_bpp:.2f} bits per parameter")
 print(f"Relative L2 error: {100 * relative_l2.item():.2f}%")
 ```

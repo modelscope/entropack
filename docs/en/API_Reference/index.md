@@ -62,7 +62,7 @@ performing numerical operations.
 | `encoded_dtype` | `torch.dtype` | Dtype used for encoding |
 | `compress_method` | `str` | Scheme actually used by the container |
 | `lossless` | `bool` | Whether the scheme is lossless |
-| `actual_bpp` | `float` | Stored bits per element, including metadata |
+| `actual_bpp` | `float` | Stored bits per parameter, including metadata |
 
 `actual_bpp = 8 * storage_nbytes() / math.prod(shape)`.
 This measures the compressed representation, not checkpoint file size or runtime memory use.

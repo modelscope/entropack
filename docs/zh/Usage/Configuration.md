@@ -12,7 +12,7 @@ Config 选择压缩方案并设置编解码参数。`execution_backend` 默认�
 
 两个无损方案均逐位恢复输入，压缩后的大小取决于张量的数据分布。`TileANSConfig` 也支持 BF16，
 因此 BF16 张量可以选择其中任一无损方案。`LatticeRANSConfig` 接受满足 `0.001 <= target_bpp <= 11`
-的有限目标码率，单位为每元素比特数，支持非整数值。实际存储码率可通过 `CompressedTensor.actual_bpp` 查看。
+的有限目标码率，单位为每参数比特数，支持非整数值。实际存储码率可通过 `CompressedTensor.actual_bpp` 查看。
 
 ## 支持的张量数据类型
 

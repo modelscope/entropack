@@ -55,7 +55,7 @@ decompress(compressed: CompressedTensor, config: CompressionConfig) -> torch.Ten
 | `encoded_dtype` | `torch.dtype` | 编码时的数据类型 |
 | `compress_method` | `str` | 容器实际使用的压缩方案 |
 | `lossless` | `bool` | 该方案是否无损 |
-| `actual_bpp` | `float` | 每元素实际存储比特数，包含元数据 |
+| `actual_bpp` | `float` | 每参数实际存储比特数，包含元数据 |
 
 `actual_bpp = 8 * storage_nbytes() / math.prod(shape)`。
 这项指标衡量压缩表示的大小，不等于检查点文件大小或运行时显存占用。
