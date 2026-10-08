@@ -45,7 +45,7 @@ pip install "entropack[cuda13]"
 
 ### 直接压缩张量
 
-以下示例将一个二维 BF16 张量以每元素 3.5 bit 为目标压缩，
+以下示例将一个二维 BF16 张量以每参数 3.5 bit 为目标压缩，
 再解压为相同形状和数据类型的张量：
 
 ```python
@@ -58,12 +58,13 @@ config = ep.LatticeRANSConfig(target_bpp=3.5)
 compressed = ep.compress(tensor, config)
 restored = ep.decompress(compressed, config)
 
-print(f"Target: {config.target_bpp:.2f} bits per element")
-print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
+print(f"Target: {config.target_bpp:.2f} bits per parameter")
+print(f"Stored: {compressed.actual_bpp:.2f} bits per parameter")
 print(restored.shape, restored.dtype)
 ```
 
-`target_bpp` 表示期望的每元素比特数（bpp），`actual_bpp` 返回包含元数据的实际存储码率。
+`target_bpp` 表示目标码率，单位为 bpp（bits per parameter）。对于通用张量，每个张量元素按一个参数计数。
+`actual_bpp` 返回包含元数据的实际存储码率。
 支持满足 `0.001 <= target_bpp <= 11` 的有限目标值，包括非整数值。
 按数据类型限制的目标上限见[压缩配置](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Configuration.html)。
 
@@ -110,7 +111,7 @@ Config 定义压缩方案及其参数，在调用张量编解码函数或构造 
 | --- | --- |
 | `DFloat11Config()` | 专用于 BF16 张量的无损压缩，解压后逐位恢复输入，适合要求精确恢复的场景。 |
 | `TileANSConfig()` | 支持 BF16、FP16、FP32、FP8、INT8 等多种数据类型的无损压缩。压缩比取决于输入的数据分布。 |
-| `LatticeRANSConfig(target_bpp=...)` | 支持浮点和整数二维张量的有损压缩。`target_bpp` 指定每元素的目标比特数，范围为 [0.001, 11]，支持非整数值，用于调整存储大小与重建精度之间的取舍。 |
+| `LatticeRANSConfig(target_bpp=...)` | 支持浮点和整数二维张量的有损压缩。`target_bpp` 指定每参数的目标比特数，范围为 [0.001, 11]，支持非整数值，用于调整存储大小与重建精度之间的取舍。 |
 
 方案选择和完整参数见[压缩配置](https://entropackdoc.readthedocs.io/zh-cn/latest/Usage/Configuration.html)。
 
