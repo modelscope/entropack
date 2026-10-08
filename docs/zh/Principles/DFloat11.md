@@ -21,7 +21,7 @@ EntroPack 为编码区域保存起始位置和符号数量，使不同区域可�
 
 实际存储大小取决于指数分布和解码所需的元数据。指数越集中，通常越容易压缩。
 对于较小的张量，元数据占比也会更高。`DFloat11Config` 不设置目标码率，
-DFloat11 这一名称也不意味着所有张量都恰好以每元素 11 bit 存储。
+DFloat11 这一名称也不意味着所有张量都恰好以每参数 11 bit 存储。
 
 ## 使用示例
 
@@ -41,5 +41,5 @@ restored = ep.decompress(compressed, config)
 assert restored.shape == tensor.shape
 assert restored.dtype == tensor.dtype
 assert torch.equal(restored.view(torch.uint8), tensor.view(torch.uint8))
-print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
+print(f"Stored: {compressed.actual_bpp:.2f} bits per parameter")
 ```

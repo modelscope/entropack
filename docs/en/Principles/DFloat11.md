@@ -28,7 +28,7 @@ No numerical quantization or rounding is involved.
 The achieved size depends on the exponent distribution and decoding metadata. A concentrated
 distribution offers more compression than a broad one, and metadata has a larger relative
 cost for small tensors. `DFloat11Config` does not specify a target bitrate. The name
-DFloat11 does not imply that every tensor is stored at exactly 11 bits per element.
+DFloat11 does not imply that every tensor is stored at exactly 11 bits per parameter.
 
 ## Usage
 
@@ -48,5 +48,5 @@ restored = ep.decompress(compressed, config)
 assert restored.shape == tensor.shape
 assert restored.dtype == tensor.dtype
 assert torch.equal(restored.view(torch.uint8), tensor.view(torch.uint8))
-print(f"Stored: {compressed.actual_bpp:.2f} bits per element")
+print(f"Stored: {compressed.actual_bpp:.2f} bits per parameter")
 ```
