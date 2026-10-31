@@ -355,6 +355,24 @@ extern "C" __global__ void e8_minmax_fields_kernel(
   block_minmax_flush(sm, minmax);
 }
 
+// Each target must be named directly so the compiler can pin it to shared or global space: on some accelerators a
+// runtime-selected generic pointer makes atomicAdd resolve the wrong address space and fault.
+#define E8_HISTOGRAM_ACCUMULATE(TARGET)                                            \
+  {                                                                                \
+    const int64_t stride = static_cast<int64_t>(gridDim.x) * blockDim.x;           \
+    for (int64_t idx = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x; \
+         idx < V; idx += stride) {                                                 \
+      const int c = c_arr[idx];                                                    \
+      atomicAdd(&(TARGET)[bin_off[0] + c], 1);                                     \
+      const int* f = fields + idx * 8;                                             \
+      _Pragma("unroll")                                                            \
+      for (int j = 0; j < 8; ++j) {                                                \
+        const int st = j * 2 + c;                                                  \
+        atomicAdd(&(TARGET)[bin_off[1 + st] + (f[j] - minmax[st * 2])], 1);        \
+      }                                                                            \
+    }                                                                              \
+  }
+
 extern "C" __global__ void e8_histogram_kernel(
     const int* __restrict__ fields,
     const int* __restrict__ c_arr,
@@ -364,34 +382,20 @@ extern "C" __global__ void e8_histogram_kernel(
     int64_t V,
     int shared_bins) {                 // >0: stage in dynamic shared memory of this many ints
   extern __shared__ int sbins[];
-  int* target;
   if (shared_bins > 0) {
     for (int t = threadIdx.x; t < shared_bins; t += blockDim.x) sbins[t] = 0;
     __syncthreads();
-    target = sbins;
-  } else {
-    target = bins;
-  }
-
-  const int64_t stride = static_cast<int64_t>(gridDim.x) * blockDim.x;
-  for (int64_t idx = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-       idx < V; idx += stride) {
-    const int c = c_arr[idx];
-    atomicAdd(&target[bin_off[0] + c], 1);
-    const int* f = fields + idx * 8;
-#pragma unroll
-    for (int j = 0; j < 8; ++j) {
-      const int st = j * 2 + c;
-      atomicAdd(&target[bin_off[1 + st] + (f[j] - minmax[st * 2])], 1);
-    }
-  }
-  if (shared_bins > 0) {
+    E8_HISTOGRAM_ACCUMULATE(sbins)
     __syncthreads();
     for (int t = threadIdx.x; t < shared_bins; t += blockDim.x) {
       if (sbins[t]) atomicAdd(&bins[t], sbins[t]);
     }
+  } else {
+    E8_HISTOGRAM_ACCUMULATE(bins)
   }
 }
+
+#undef E8_HISTOGRAM_ACCUMULATE
 
 extern "C" __global__ void e8_rans_encode_vector_kernel(
     const int* __restrict__ fields,
@@ -893,7 +897,8 @@ __device__ __forceinline__ void e8_decode_packed32_body(
     const bool valid = lane < valid_lanes;
     if constexpr (PREF) {
       // The renorm rate grows with the coded rate, so at high coded rates the cold-payload latency matters more.
-      if (lane < 4) {
+      // An empty payload has a null base pointer, and a prefetch before it is not harmless everywhere, so skip it.
+      if (lane < 4 && input != payload) {
         const char* p = reinterpret_cast<const char*>(input) - 128 * (lane + 1);
         if (p >= reinterpret_cast<const char*>(payload)) {
           asm volatile("prefetch.global.L2 [%0];" ::"l"(p));
@@ -1044,7 +1049,7 @@ __device__ __forceinline__ void e8_decode_shlut_body(
     }
     first = false;
     const bool valid = lane < valid_lanes;
-    if (lane < 4) {
+    if (lane < 4 && input != payload) {
       const char* p = reinterpret_cast<const char*>(input) - 128 * (lane + 1);
       if (p >= reinterpret_cast<const char*>(payload)) {
         asm volatile("prefetch.global.L2 [%0];" ::"l"(p));

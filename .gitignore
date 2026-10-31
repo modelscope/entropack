@@ -28,3 +28,27 @@ docs/*/_build/
 
 # Local source-distribution rules
 /MANIFEST.in
+
+# Local data, checkouts and tooling
+/data
+/models
+/scripts
+/diffusers
+/.vscode
+/.qoder
+/.opencode
+
+# Model weights and local artifacts
+*.pkl
+*.safetensors
+*.pth
+*.ckpt
+*.pt
+*.bin
+*.DS_Store
+*.msc
+*.mv
+log*.txt
+
+# Agent instructions
+AGENTS.md

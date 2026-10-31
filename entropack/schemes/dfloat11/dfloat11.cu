@@ -279,11 +279,12 @@ __device__ __forceinline__ int32_t block_exclusive_scan(int32_t* s_scan, int32_t
     __syncthreads();
 
     if (warp_id == 0) {
-      const unsigned wmask = (nwarps == 32) ? full : ((1u << nwarps) - 1u);
       int32_t w = (lane < nwarps) ? s_scan[lane] : 0;
 #pragma unroll
       for (int off = 1; off < 32; off <<= 1) {
-        const int32_t n = __shfl_up_sync(wmask, w, off);
+        // Every lane of the warp executes this, so the mask must be the full warp; lanes past nwarps hold 0 and are
+        // excluded from the add.
+        const int32_t n = __shfl_up_sync(full, w, off);
         if (lane >= off && lane < nwarps) w += n;
       }
       if (lane < nwarps) {
