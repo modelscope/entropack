@@ -34,8 +34,8 @@ def _int8_gemm_kernel(
     mask_m = rm < M
     mask_n = rn < N
 
-    a_ptr = A + rm[:, None] * stride_am + rk[None, :]
-    b_ptr = B + rn[:, None] * stride_bn + rk[None, :]
+    a_ptr = A + rm[:, None].to(tl.int64) * stride_am + rk[None, :]
+    b_ptr = B + rn[:, None].to(tl.int64) * stride_bn + rk[None, :]
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.int32)
     for k in range(0, K, BLOCK_K):
         mask_k = (k + rk) < K
@@ -50,7 +50,7 @@ def _int8_gemm_kernel(
     out = out * tl.load(B_SCALE + rn, mask=mask_n, other=0.0)[None, :]
     if HAS_BIAS:
         out += tl.load(BIAS + rn, mask=mask_n, other=0.0).to(tl.float32)[None, :]
-    tl.store(C + rm[:, None] * N + rn[None, :], out.to(C.dtype.element_ty),
+    tl.store(C + rm[:, None].to(tl.int64) * N + rn[None, :], out.to(C.dtype.element_ty),
              mask=mask_m[:, None] & mask_n[None, :])
 
 @triton.jit
@@ -58,7 +58,7 @@ def _quantize_rows_kernel(
     X, OUT, SCALE, K, stride_xm, CODE_MAX: tl.constexpr, ROUNDS: tl.constexpr, EPS: tl.constexpr,
     BLOCK_K: tl.constexpr,
 ):
-    row = tl.program_id(0)
+    row = tl.program_id(0).to(tl.int64)
     base = X + row * stride_xm
     amax = tl.zeros((), dtype=tl.float32)
     for k in range(0, K, BLOCK_K):
