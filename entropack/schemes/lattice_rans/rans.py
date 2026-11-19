@@ -1,6 +1,5 @@
 import numpy as np
 
-from ..tile_ans.eager import normalize_counts, quantized_cross_entropy
 from ..tile_ans.format import NUM_STATES, STATE_MIN
 from .format import BITS_PER_BYTE, NUM_COORD_FIELDS, vector_tile_elements
 
@@ -8,6 +7,56 @@ __all__ = [
     "build_codec_tables", "coded_bytes", "decode_vector_stream", "encode_vector_stream", "normalize_freq",
     "vector_stream_analytic_bytes",
 ]
+
+
+def _normalize_counts(counts: np.ndarray, table_size: int) -> np.ndarray:
+    """Largest-remainder (Hamilton) allocation as a sorted multi-pass scatter: present symbols clamp
+    to frequency >= 1, then the remainder is served in residual order, ties to the smaller symbol
+    index. A served symbol re-queued with residual+1 lands behind every not-yet-served one
+    (residuals lie in [0,1)), so each pass serves the still-eligible symbols in that same order:
+    difference > 0 walks descending residual (one pass suffices, difference <= n_present);
+    difference < 0 walks ascending residual over symbols with frequency > 1, dropping those that
+    reach exactly 1.
+    """
+    counts = np.asarray(counts, dtype=np.int64)
+    present = np.flatnonzero(counts)
+    if present.size == 0:
+        raise ValueError("cannot build an rANS codebook from empty input")
+
+    target = counts.astype(np.float64) * (table_size / int(counts.sum()))
+    frequencies = np.floor(target).astype(np.int64)
+    frequencies[present] = np.maximum(frequencies[present], 1)
+
+    difference = table_size - int(frequencies.sum())
+    if difference:
+        residual = target - frequencies
+        if difference > 0:
+            order = present[np.argsort(-residual[present], kind="stable")]
+            need = difference
+            while need > 0:
+                take = order[:need]
+                frequencies[take] += 1
+                need -= take.size
+        else:
+            eligible = present[frequencies[present] > 1]
+            if eligible.size == 0:
+                raise ValueError("unable to normalize rANS frequencies")
+            order = eligible[np.argsort(residual[eligible], kind="stable")]
+            need = -difference
+            while need > 0:
+                live = order[frequencies[order] > 1]
+                if live.size == 0:
+                    raise ValueError("unable to normalize rANS frequencies")
+                take = live[:need]
+                frequencies[take] -= 1
+                need -= take.size
+    return frequencies.astype(np.uint16)
+
+
+def quantized_cross_entropy(counts: np.ndarray, frequencies: np.ndarray, probability_bits: int) -> float:
+    present = counts > 0
+    terms = counts[present].astype(np.float64) * (probability_bits - np.log2(frequencies[present].astype(np.float64)))
+    return float(np.sum(terms))
 
 
 def normalize_freq(counts: np.ndarray, table_size: int) -> np.ndarray:
@@ -19,7 +68,7 @@ def normalize_freq(counts: np.ndarray, table_size: int) -> np.ndarray:
             f"E8 coordinate alphabet {counts.size} exceeds rANS table_size {table_size}; "
             "raise prob_bits or coarsen the lattice scale"
         )
-    return normalize_counts(counts, table_size)
+    return _normalize_counts(counts, table_size)
 
 
 def build_codec_tables(freq: np.ndarray, probability_bits: int):
