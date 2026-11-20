@@ -249,6 +249,137 @@ def _optimize_rows(
     return replace(summary, scales=fitted_scales)
 
 
+# Device-resident pricing for the scale search; iterations the kernels refuse fall back to host pricing.
+_ESTIMATE_SOURCE = Path(__file__).with_name("fast_estimate.cu")
+_HIST_SHARED = 48 * 1024
+_ESTIMATE_THREADS = 256
+#: Dynamic shared bytes per alphabet slot in ep_fused_estimate: int count, double residual, int frequency, int mask.
+_BYTES_PER_SYMBOL = 20
+
+
+def _log2_lut(table_size: int, device) -> torch.Tensor:
+    """log2 of every frequency, built on the host with np.log2 -- the same call quantized_cross_entropy
+    prices with. The kernel reads this table instead of computing log2 on device: device log2 can differ
+    by an ulp, which would shift the estimate away from the host price."""
+    lut = np.zeros(table_size + 1, dtype=np.float64)
+    lut[1:] = np.log2(np.arange(1, table_size + 1, dtype=np.float64))
+    return torch.from_numpy(lut).to(device)
+
+
+class _EstimateResources:
+    """Compiled estimate kernels and their persistent device buffers, cached per device and prob_bits."""
+
+    def __init__(self, device_index: int, prob_bits: int, device):
+        self.caps = _device_caps.caps(device_index)
+        self.table_size = 1 << prob_bits
+        with cupy.cuda.Device(device_index):
+            module = cupy.RawModule(code=_ESTIMATE_SOURCE.read_text(), options=("--std=c++17",))
+            self.hist = module.get_function("ep_histogram_padded")
+            self.estimate = module.get_function("ep_fused_estimate")
+            self.total = module.get_function("ep_total_bytes")
+        # The kernel stages histograms in dynamic shared beside STATIC_SHARED of static shared; the
+        # sum must fit the device's opt-in limit -- the same rule _shared_lut_usable applies.
+        self.hist_shared = min(_HIST_SHARED, self.caps.shared_limit(STATIC_SHARED) - STATIC_SHARED)
+        _ensure_dynamic_shared(self.hist, self.hist_shared)
+        # ep_fused_estimate also stages the block reductions (8 warps of double) and the index-order scan
+        # (one int per thread), and pads the slot count to even. Rounding the budget down to that same
+        # granularity first keeps the padded request inside the limit: without it prob_bits 14 and above
+        # pad back over it and every launch dies with CUDA_ERROR_INVALID_VALUE.
+        slack = self.caps.shared_limit(STATIC_SHARED) - STATIC_SHARED - 64 * 8 - BLOCK_SIZE * 4
+        slots = (slack // _BYTES_PER_SYMBOL) & ~1
+        self.max_alphabet = max(0, min(self.table_size, slots - 1))
+        self.estimate_shared = ((self.max_alphabet + 1) & ~1) * _BYTES_PER_SYMBOL + 64 * 8 + BLOCK_SIZE * 4
+        _ensure_dynamic_shared(self.estimate, self.estimate_shared)
+        self.bins = torch.zeros(NUM_STREAMS_FULL * self.table_size, dtype=torch.int32, device=device)
+        self.partial_bits = torch.zeros(NUM_STREAMS_FULL, dtype=torch.float64, device=device)
+        self.alpha_out = torch.zeros(NUM_STREAMS_FULL, dtype=torch.int32, device=device)
+        self.nsym_out = torch.zeros(NUM_STREAMS_FULL, dtype=torch.int32, device=device)
+        self.fallback = torch.zeros(1, dtype=torch.int32, device=device)
+        self.out = torch.zeros(2, dtype=torch.float64, device=device)
+        self.log2_lut = _log2_lut(self.table_size, device)
+        self.minmax_template = torch.from_numpy(_MINMAX_TEMPLATE.copy()).to(device)
+
+
+_ESTIMATE_CACHE: dict = {}
+
+
+def _estimate_resources(device_index: int, prob_bits: int, device) -> _EstimateResources:
+    key = (device_index, prob_bits, str(device))
+    got = _ESTIMATE_CACHE.get(key)
+    if got is None:
+        got = _EstimateResources(device_index, prob_bits, device)
+        _ESTIMATE_CACHE[key] = got
+    return got
+
+
+class _SearchState:
+    """Per-search buffers and marshalled launch arguments, built once and reused by every bisection
+    iteration. ``work`` and ``rms`` must already be subsampled to the search budget by the caller;
+    the price is over that operand, plus the scale-independent row scales and layout block."""
+
+    def __init__(self, work, rms, prob_bits: int, tile_elements: int):
+        rows, cols = work.shape
+        device = work.device
+        device_index = _device_index(work)
+        vecs_per_row = cols // LATTICE_DIM
+        self.sub_rows = rows
+        self.work = work
+        self.rms = rms
+        # Row scales and the layout block do not depend on the scale being searched.
+        self.scale_independent_bytes = rows * 4 + MODEL_LAYOUT_BYTES
+        self.prob_bits = prob_bits
+        self.tile_elements = tile_elements
+
+        res = _estimate_resources(device_index, prob_bits, device)
+        self.res = res
+        self.device_index = device_index
+        self.stream = torch.cuda.current_stream(device)
+        v_sub = rows * vecs_per_row
+        self.grid = _grid(res.caps, v_sub)
+        self.fields = torch.empty(v_sub * LATTICE_DIM, dtype=torch.int32, device=device)
+        self.c_arr = torch.empty(v_sub, dtype=torch.int32, device=device)
+
+        self.hist_tail = (_pointer(res.bins), np.int64(v_sub), np.int32(res.hist_shared), np.int32(res.table_size),
+                          np.int32(_MM_CMAX), np.int32(_INT_MAX))
+        self.estimate_tail = (_pointer(res.log2_lut), _pointer(res.partial_bits), _pointer(res.alpha_out),
+                              _pointer(res.nsym_out), _pointer(res.fallback), np.int64(res.table_size),
+                              np.int32(prob_bits), np.int64(v_sub), np.int32(_MM_CMAX), np.int32(_INT_MAX),
+                              np.int32(res.max_alphabet))
+        self.total_tail = (_pointer(res.partial_bits), _pointer(res.alpha_out), _pointer(res.nsym_out),
+                           _pointer(res.fallback), _pointer(res.out), np.int64(res.table_size), np.int32(prob_bits),
+                           np.int64(v_sub), np.int32(vector_tile_elements(tile_elements)), np.int32(NUM_STATES))
+        self.quantize = _kernel(device_index, prob_bits, _ENCODE_KERNELS[work.dtype][0])
+        self.quantize_head = (_pointer(self.work), _pointer(self.rms))
+        self.quantize_tail = (np.int32(rows), np.int32(cols), np.int32(vecs_per_row), _pointer(self.fields),
+                              _pointer(self.c_arr))
+
+    def total_at(self, scale: float) -> float:
+        """Container bytes at this scale, or the host path's answer for an iteration the kernels refuse."""
+        res = self.res
+        with cupy.cuda.Device(self.device_index), _external_stream(self.stream):
+            minmax = res.minmax_template.clone()
+            p_minmax = _pointer(minmax)
+            self.quantize((self.grid,), (BLOCK_SIZE,),
+                          self.quantize_head + (np.float32(scale),) + self.quantize_tail + (p_minmax,))
+            res.bins.zero_()
+            res.fallback.zero_()
+            res.hist((self.grid,), (BLOCK_SIZE,),
+                     (_pointer(self.fields), _pointer(self.c_arr), p_minmax) + self.hist_tail,
+                     shared_mem=res.hist_shared)
+            res.estimate((NUM_STREAMS_FULL,), (_ESTIMATE_THREADS,),
+                         (_pointer(res.bins), p_minmax) + self.estimate_tail, shared_mem=res.estimate_shared)
+            res.total((1,), (32,), self.total_tail)
+            out = res.out.cpu()
+        if float(out[1]) != 0.0:
+            return self._host_total(scale)
+        return float(out[0]) + self.scale_independent_bytes
+
+    def _host_total(self, scale: float) -> float:
+        request = _QuantizeRequest.of(self.work, self.rms, scale, self.prob_bits)
+        summary = _quantize_pass(request)
+        return _analytic_total_bytes(summary.counts, summary.sizes, self.sub_rows, self.prob_bits, self.tile_elements)
+
+
 def _bisect_scale_cuda(work, rms, prob_bits, target_bpp, tile_elements, n_iter=34, max_vectors=262144):
     rows, cols = work.shape
     device = work.device
@@ -259,11 +390,11 @@ def _bisect_scale_cuda(work, rms, prob_bits, target_bpp, tile_elements, n_iter=3
     rms_sub = rms if index is None else rms.index_select(0, index)
     N_sub = sub_rows * cols
 
+    state = _SearchState(w_sub, rms_sub, prob_bits, tile_elements)
     lo, hi = 0.001, 8.0
     for _ in range(n_iter):
         mid = (lo * hi) ** 0.5
-        summary = _quantize_pass(_QuantizeRequest.of(w_sub, rms_sub, mid, prob_bits))
-        total = _analytic_total_bytes(summary.counts, summary.sizes, sub_rows, prob_bits, tile_elements)
+        total = state.total_at(mid)
         if BITS_PER_BYTE * total / N_sub > target_bpp:
             lo = mid
         else:
