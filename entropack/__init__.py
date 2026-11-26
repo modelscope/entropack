@@ -6,10 +6,11 @@ except metadata.PackageNotFoundError:
     __version__ = "0+unknown"
 
 from .compression import CompressedTensor, compress, decompress
-from .linear import CompressedFP8Linear, CompressedINT8Linear, CompressedLinear
+from .linear import CompressedFP8Linear, CompressedINT8Linear, CompressedLinear, dequantize_model
 from .schemes import CompressionConfig, DFloat11Config, EntroPackLossyConfig, LatticeRANSConfig, RawConfig, TileANSConfig
 
 __all__ = [
     "CompressedFP8Linear", "CompressedINT8Linear", "CompressedLinear", "CompressedTensor", "CompressionConfig",
-    "DFloat11Config", "EntroPackLossyConfig", "LatticeRANSConfig", "RawConfig", "TileANSConfig", "__version__", "compress", "decompress",
+    "DFloat11Config", "EntroPackLossyConfig", "LatticeRANSConfig", "RawConfig", "TileANSConfig", "__version__",
+    "compress", "decompress", "dequantize_model",
 ]
