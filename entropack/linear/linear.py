@@ -490,4 +490,27 @@ class CompressedINT8Linear(QuantizedLinear):
         return self._epilogue(torch._int_mm(activation, codes.t()), activation_scale, weight_scale, out_dtype)
 
 
-__all__ = ["CompressedFP8Linear", "CompressedINT8Linear", "CompressedLinear", "QuantizedLinear"]
+def dequantize_model(model: torch.nn.Module) -> torch.nn.Module:
+    """Replace every compressed linear in ``model`` with a dense ``nn.Linear`` holding reconstructed weights."""
+    for name, module in model.named_children():
+        if isinstance(module, CompressedLinear):
+            device = module.weight.device
+            with torch.device("meta"):
+                dense = torch.nn.Linear(
+                    module.in_features,
+                    module.out_features,
+                    bias=module.bias is not None,
+                    dtype=module._init_dtype,
+                )
+            dense.weight = torch.nn.Parameter(
+                module.dequantize(device).to(device=device, dtype=module._init_dtype), requires_grad=False
+            )
+            if module.bias is not None:
+                dense.bias = torch.nn.Parameter(module.bias.data.to(device), requires_grad=False)
+            model._modules[name] = dense
+        else:
+            dequantize_model(module)
+    return model
+
+
+__all__ = ["CompressedFP8Linear", "CompressedINT8Linear", "CompressedLinear", "QuantizedLinear", "dequantize_model"]
